@@ -1,0 +1,37 @@
+# The documentation site: https://clang-retro.github.io/win32-sdk/
+# Build it with `pip install -r .docs/requirements.txt` and `mkdocs serve`.
+INHERIT: .docs/base.yml
+site_name: 32-bit Windows SDK
+site_description: Win32s, Windows NT 3.1 to 11 and Windows 95/98/ME programs with clang
+site_url: https://clang-retro.github.io/win32-sdk/
+repo_url: https://github.com/clang-retro/win32-sdk
+repo_name: clang-retro/win32-sdk
+edit_uri: ""
+hooks:
+  - .docs/hooks.py
+
+extra:
+  retro:
+    doxygen: .docs/Doxyfile
+    github: clang-retro/win32-sdk
+    branch: main
+    pages:
+      README.md: index.md
+      NOTICE.md: redistributing.md
+      CONTRIBUTING.md: contributing.md
+
+nav:
+  - "Home": index.md
+  - "The sysroots": sysroots.md
+  - "Windows 95, 98, ME and NT 4.0": win9x.md
+  - "Windows NT 3.x": nt3.md
+  - "Windows 2000 and XP": win2k-xp.md
+  - "C++": cxx.md
+  - "picolibc instead of the CRT": picolibc.md
+  - "Checks and tests": checks.md
+  - "Microsoft's SDKs and DDKs": ms-sdks.md
+  - "Redistributing": redistributing.md
+  - "Contributing": contributing.md
+  - "License": license.md
+  - API reference: api/index.html
+  - "All clang-retro projects": https://clang-retro.github.io/

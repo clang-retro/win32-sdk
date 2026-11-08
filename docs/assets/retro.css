@@ -1,0 +1,36 @@
+/* clang-retro documentation theme: phosphor green on a dark CRT.
+   SPDX-License-Identifier: AGPL-3.0-only */
+
+:root {
+  --md-primary-fg-color: #0b1a10;
+  --md-primary-fg-color--light: #16301e;
+  --md-primary-fg-color--dark: #050d08;
+  --md-primary-bg-color: #6cf08a;
+  --md-primary-bg-color--light: #6cf08ab3;
+  --md-accent-fg-color: #12a33c;
+  --md-accent-fg-color--transparent: #12a33c1a;
+  --md-typeset-a-color: #0d7f2f;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #0c120e;
+  --md-default-bg-color--light: #0c120eb3;
+  --md-code-bg-color: #101a13;
+  --md-typeset-a-color: #6cf08a;
+  --md-accent-fg-color: #9dffb3;
+}
+
+.md-header__title, .md-nav__title {
+  font-family: var(--md-code-font-family);
+  letter-spacing: 0.02em;
+}
+
+.md-header__button.md-logo img { border-radius: 4px; }
+
+/* Wide tables (target lists, call tables) scroll instead of squeezing. */
+.md-typeset table:not([class]) { font-size: 0.72rem; }
+
+/* Cards on the project and home pages. */
+.md-typeset .grid.cards > ul > li { border-color: var(--md-accent-fg-color--transparent); }
+.md-typeset .grid.cards > ul > li:hover { border-color: var(--md-accent-fg-color); }
+.md-typeset figure img { border: 1px solid var(--md-default-fg-color--lightest); border-radius: 4px; }
