@@ -78,7 +78,7 @@ extra:
   generator: false
   social:
     - icon: material/view-grid-outline
-      link: https://clang-retro.github.io/dos-sdk/projects/
+      link: https://clang-retro.github.io/
       name: All clang-retro projects
     - icon: fontawesome/brands/github
       link: https://github.com/clang-retro
