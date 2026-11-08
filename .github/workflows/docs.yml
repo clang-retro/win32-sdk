@@ -1,0 +1,69 @@
+# Build the documentation site with MkDocs, for every pull request and push,
+# and publish it on GitHub Pages from the default branch.
+#
+# Publishing needs Pages turned on once, with "GitHub Actions" as the source
+# (Settings > Pages > Build and deployment). Until then the site is built and
+# checked, and the deploy job is skipped with a notice.
+name: Docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: read
+    outputs:
+      pages: ${{ steps.pages.outputs.enabled }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: .docs/requirements.txt
+      - run: pip install -r .docs/requirements.txt
+      - run: mkdocs build --strict
+      - name: Is GitHub Pages on?
+        id: pages
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${{ github.repository }}/pages" --jq .build_type | grep -qx workflow; then
+            echo enabled=true >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::GitHub Pages is not set to deploy from GitHub Actions in this repository, so the site is built but not published."
+          fi
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.pages.outputs.enabled == 'true'
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.pages == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
