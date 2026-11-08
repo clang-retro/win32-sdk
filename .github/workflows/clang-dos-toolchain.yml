@@ -6,10 +6,10 @@ name: clang-dos toolchain
 
 on:
   pull_request:
-    paths-ignore: ['**/*.md', 'LICENSE*']
+    paths-ignore: ['**/*.md', 'docs/**', '.docs/**', 'mkdocs.yml', 'clang-retro-docs/**', '.github/workflows/docs.yml', '.github/workflows/clang-retro-docs.yml', 'LICENSE*']
   push:
     branches: [main]
-    paths-ignore: ['**/*.md', 'LICENSE*']
+    paths-ignore: ['**/*.md', 'docs/**', '.docs/**', 'mkdocs.yml', 'clang-retro-docs/**', '.github/workflows/docs.yml', '.github/workflows/clang-retro-docs.yml', 'LICENSE*']
   workflow_dispatch:
     inputs:
       windows:
