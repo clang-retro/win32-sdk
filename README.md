@@ -160,10 +160,11 @@ system DLLs on NT, so one exe runs on both.
   (`unicows.exe`) has it; it is not in this repository. Without it, the
   program stops at its first W call with a message box naming the missing
   DLL.
-* [opencow](https://opencow.sourceforge.net) (MPL) is an open-source
-  `unicows.dll`, which libunicows loads when `unicows.dll` is absent. It has
-  only about 130 of MSLU's 500 functions (not `lstrcmpiW` or `wsprintfW`,
-  for example), so it fits only programs that use what it has.
+* [clang-retro/unicows](https://github.com/clang-retro/unicows) (AGPL) is
+  an open-source `unicows.dll` with all 506 of MSLU's functions, built with
+  this toolchain. It also builds as `opencow.dll`, which libunicows loads
+  when `unicows.dll` is absent. A program that ships it has to offer its
+  source under the AGPL.
 * unicows covers the program's own Win32 calls, not the C library's. The
   9x `msvcrt.dll` calls W stubs directly in about 50 wide functions:
   `_wfopen`, `_wopen`, `_wstat`, `_wfindfirst`, `_waccess`, `_wremove`,
