@@ -12,6 +12,7 @@ hooks:
 
 extra:
   retro:
+    doxygen: .docs/Doxyfile
     github: clang-retro/win32-sdk
     branch: main
     pages:
@@ -32,4 +33,5 @@ nav:
   - "Redistributing": redistributing.md
   - "Contributing": contributing.md
   - "License": license.md
+  - API reference: api/index.html
   - "All clang-retro projects": https://clang-retro.github.io/

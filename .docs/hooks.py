@@ -28,10 +28,16 @@
 #       branch: main
 #       pages:                  repository files shown as site pages
 #         README.md: index.md
+#       doxygen: .docs/Doxyfile   an API reference built into <site>/api/
+#                                 after the site (from the root; needs
+#                                 doxygen, else it is left out with a note)
 
+import logging
 import os
 import posixpath
 import re
+import shutil
+import subprocess
 
 from mkdocs.exceptions import PluginError
 
@@ -41,6 +47,7 @@ _HEADING = re.compile(r'^(#{1,6})\s+(.*?)\s*#*\s*$')
 _LINK = re.compile(r'(!?)\[((?:[^\[\]]|\[[^\]]*\])*)\]\(\s*<?([^)\s>]+)>?(\s+"[^"]*")?\s*\)')
 
 _settings = {}
+log = logging.getLogger("mkdocs.hooks.retro")
 
 
 def on_config(config):
@@ -177,3 +184,21 @@ def on_page_markdown(markdown, page, config, files):
         last = m.end()
     parts.append(_fix_links(markdown[last:], page_path, page_path))
     return "".join(parts)
+
+
+def on_post_build(config):
+    doxyfile = _settings.get("doxygen")
+    if not doxyfile:
+        return
+    if shutil.which("doxygen") is None:
+        log.info("doxygen is not installed: the API reference (api/) is left out")
+        return
+    env = dict(os.environ,
+               RETRO_API_OUT=os.path.abspath(config.site_dir),
+               RETRO_ROOT=_settings["root"],
+               RETRO_DOCS=os.path.abspath(config.docs_dir))
+    result = subprocess.run(["doxygen", doxyfile], cwd=_settings["root"], env=env,
+                            capture_output=True, text=True)
+    if result.returncode != 0:
+        raise PluginError(f"doxygen {doxyfile} failed:\n{result.stderr}")
+    log.info("API reference written to %s", os.path.join(config.site_dir, "api"))

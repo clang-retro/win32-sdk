@@ -68,6 +68,8 @@ markdown_extensions:
 validation:
   nav:
     omitted_files: info
+    # The API reference (api/) is made by doxygen after the site.
+    not_found: info
   links:
     not_found: warn
     anchors: info

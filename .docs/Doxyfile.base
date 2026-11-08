@@ -1,0 +1,55 @@
+# Doxygen settings shared by the clang-retro sites' API references.
+# Each repository's .docs/Doxyfile includes this one and sets PROJECT_NAME,
+# INPUT and the rest; .docs/hooks.py runs it after `mkdocs build` and puts
+# the HTML in <site>/api/.
+
+OUTPUT_DIRECTORY       = $(RETRO_API_OUT)
+HTML_OUTPUT            = api
+CREATE_SUBDIRS         = NO
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+GENERATE_TREEVIEW      = YES
+SEARCHENGINE           = YES
+SERVER_BASED_SEARCH    = NO
+QUIET                  = YES
+WARNINGS               = NO
+WARN_IF_UNDOCUMENTED   = NO
+WARN_IF_DOC_ERROR      = NO
+WARN_NO_PARAMDOC       = NO
+
+RECURSIVE              = YES
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_LOCAL_CLASSES  = YES
+SOURCE_BROWSER         = YES
+STRIP_CODE_COMMENTS    = NO
+REFERENCED_BY_RELATION = NO
+REFERENCES_RELATION    = NO
+VERBATIM_HEADERS       = YES
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+FULL_PATH_NAMES        = YES
+STRIP_FROM_PATH        = $(RETRO_ROOT)
+STRIP_FROM_INC_PATH    = $(RETRO_ROOT)
+SORT_MEMBER_DOCS       = NO
+HAVE_DOT               = NO
+EXCLUDE_PATTERNS       = */tests/* */test/* */examples/* */demos/* */site/*
+
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = NO
+SEARCH_INCLUDES        = YES
+# The 16-bit and Toolbox keywords, so declarations parse as plain C.
+PREDEFINED             = __far= __near= __huge= _far= _near= _huge= \
+                         __pascal= _pascal= __export= _export= \
+                         __loadds= _loadds= __interrupt= _interrupt= \
+                         __cdecl= _cdecl= __stdcall= __attribute__(x)= \
+                         __declspec(x)= pascal= DOXYGEN
+
+HTML_COLORSTYLE        = TOGGLE
+HTML_COLORSTYLE_HUE    = 135
+HTML_COLORSTYLE_SAT    = 120
+HTML_COLORSTYLE_GAMMA  = 90
+HTML_DYNAMIC_SECTIONS  = YES
+PROJECT_LOGO           = $(RETRO_DOCS)/assets/logo-48.png

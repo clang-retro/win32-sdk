@@ -1,0 +1,9 @@
+# The API reference of the documentation site (api/), run by .docs/hooks.py
+# from the repository's root after `mkdocs build`.
+@INCLUDE               = .docs/Doxyfile.base
+PROJECT_NAME           = "32-bit Windows SDK"
+PROJECT_BRIEF          = "The sysroot, import and SDK tools"
+INPUT                  = tools \
+                         scripts
+FILE_PATTERNS          = *.py *.h
+OPTIMIZE_OUTPUT_FOR_C  = NO
