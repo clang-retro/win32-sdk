@@ -9,9 +9,11 @@
 #   sysroots/<name>/                the five mingw-w64 sysroots and the
 #                                   picolibc one, each with share/licenses/
 #   share/clang-dos/                check-imports.py, msvcrt-versions.txt,
-#                                   kernel-versions.txt,
-#                                   build-modern-sysroot.sh, README
+#                                   kernel-versions.txt, vxd-link.py,
+#                                   vxd-check.py, build-modern-sysroot.sh,
+#                                   README
 #   share/clang-dos/ddk/            the test driver and its client
+#   share/clang-dos/vxd/            the test VxD and its client
 #   share/licenses/win32-sdk/       the licences (see NOTICE.md)
 # Sysroots made by tools/import-ms-sdk.py from Microsoft's kits are left
 # out, as they cannot be passed on.
@@ -39,8 +41,10 @@ else
 fi
 cp "$here/tools/check-imports.py" "$here/tools/msvcrt-versions.txt" \
   "$here/tools/kernel-versions.txt" "$here/scripts/build-modern-sysroot.sh" \
-  "$here/scripts/fix-ddk-headers.sh" "$d/share/clang-dos/"
+  "$here/scripts/fix-ddk-headers.sh" "$here/tools/vxd-link.py" \
+  "$here/tools/vxd-check.py" "$d/share/clang-dos/"
 cp -R "$here/tests/ddk" "$d/share/clang-dos/ddk"
+cp -R "$here/vxd" "$d/share/clang-dos/vxd"
 cp "$here/README.md" "$d/share/clang-dos/docs/win32-README.md"
 cp "$here/LICENSE" "$d/share/licenses/win32-sdk/LICENSE"
 cp "$here/NOTICE.md" "$d/share/licenses/win32-sdk/NOTICE.md"
