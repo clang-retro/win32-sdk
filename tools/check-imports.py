@@ -30,6 +30,13 @@ and the section that holds the import address table must be writable: the
 NT 3.x loader predates the IAT directory, which later loaders use to make
 the table writable while they fill it in.
 
+Kernel-mode drivers (.sys files, native subsystem) are checked with --nt
+too: each import from ntoskrnl.exe, hal.dll, ndis.sys, scsiport.sys,
+videoprt.sys and tdi.sys must be in that version, as listed in
+kernel-versions.txt (from the import libraries of the NT 3.1, NT 4.0,
+2000, XP and Server 2003 DDKs; a function from NT 3.5 or 3.51 counts as
+4.0's). Other modules are not checked.
+
 The exit status is 1 when something is missing, 0 otherwise.
 """
 import argparse
@@ -148,6 +155,52 @@ for names, version in [
     NT_ADDED.update({name: version for name in names.split()})
 
 
+NATIVE = 1  # IMAGE_SUBSYSTEM_NATIVE: drivers (.sys)
+KERNEL_LABELS = {(3, 10): "Windows NT 3.1", (4, 0): "Windows NT 4.0",
+                 (5, 0): "Windows 2000", (5, 1): "Windows XP",
+                 (5, 2): "Windows Server 2003"}
+
+
+def load_kernel_versions():
+    """{(module, name): (major, minor)}: the first Windows NT version whose
+    kernel or helper module exports each function (kernel-versions.txt,
+    which gen-kernel-versions.py makes from the DDKs' import libraries)."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "kernel-versions.txt")
+    out = {}
+    if not os.path.exists(path):
+        print("  warning: no %s: the kernel imports are not checked" % path)
+        return out
+    with open(path) as f:
+        for line in f:
+            module, name, version = line.split()
+            major, minor = version.split(".")
+            out[(module, name)] = (int(major), int(minor))
+    return out
+
+
+def check_kernel_import(dll, name, nt, kernel):
+    """Check one import of a driver; return whether it is bad."""
+    ldll = dll.lower()
+    if not any(m == ldll for m, _ in kernel):
+        return False  # a module kernel-versions.txt does not cover
+    if name.startswith("#"):
+        print("  warning: %s %s: drivers import by name" % (dll, name))
+        return False
+    added = kernel.get((ldll, name))
+    if added is None:
+        if nt <= max(KERNEL_LABELS):
+            print("  error: %s!%s is not in the %s of Windows NT 3.1 to "
+                  "Server 2003" % (dll, name, dll))
+            return True
+        return False
+    if added > nt:
+        print("  error: %s!%s is in %s and later, not Windows NT %d.%02d"
+              % (dll, name, KERNEL_LABELS[added], nt[0], nt[1]))
+        return True
+    return False
+
+
 def load_msvcrt_versions():
     """Map each msvcrt.dll export to (version, label) of the first Windows
     whose system msvcrt.dll has it (msvcrt-versions.txt, which
@@ -202,6 +255,7 @@ class PE:
         if magic != 0x10B:
             raise ValueError("not a 32-bit PE file")
         self.subsystem_version = struct.unpack_from("<HH", d, opt + 48)
+        self.subsystem, = struct.unpack_from("<H", d, opt + 68)
         ndirs, = struct.unpack_from("<I", d, opt + 92)
         self.dirs = [struct.unpack_from("<II", d, opt + 96 + 8 * i)
                      for i in range(min(ndirs, 16))]
@@ -333,6 +387,11 @@ def main():
         if nt is not None:
             bad = check_nt(pe, nt, versions) or bad
             continue
+        if pe.subsystem == NATIVE:
+            print("  error: a kernel-mode driver: check it for a Windows NT "
+                  "version with --nt")
+            bad = True
+            continue
         if major > 4:
             print("  error: Windows 9x loads only subsystem version 4.x "
                   "or older")
@@ -395,8 +454,12 @@ def check_nt(pe, nt, versions):
               "the NT 3.x loader predates the IAT directory that later "
               "loaders use to make it writable while they fill it in")
         bad = True
+    kernel = load_kernel_versions() if pe.subsystem == NATIVE else None
     msvcrt = load_msvcrt_versions() if nt >= (4, 0) else None
     for dll, name in pe.imports():
+        if kernel is not None:
+            bad = check_kernel_import(dll, name, nt, kernel) or bad
+            continue
         ldll = dll.lower()
         if ldll == "msvcrt.dll" and msvcrt is None:
             print("  error: %s!%s: Windows NT 3.x has no msvcrt.dll; use the "

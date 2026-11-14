@@ -14,14 +14,20 @@ scripts/build-win9x.sh           mingw-w64 sysroot for 9x, NT 3.x/4.0, 2000/XP
 scripts/build-unicows.sh         adds libunicows to it
 scripts/build-cxx.sh             adds libc++, libc++abi and libunwind (9x to XP)
 scripts/build-modern-sysroot.sh  sysroot for Vista and later, with libc++
+scripts/fix-ddk-headers.sh       fixes mingw-w64's DDK headers in a sysroot
 cfg/                             --config files for the toolchain package
-tools/check-imports.py           checks a program's imports for a Windows version
+                                 (*-ddk.cfg for kernel-mode drivers)
+tools/check-imports.py           checks a program's or driver's imports for a
+                                 Windows version
+tools/kernel-versions.txt        which NT kernel has each function, for it
+tools/gen-kernel-versions.py     makes kernel-versions.txt from the DDKs
 tools/import-ms-sdk.py           sysroots from your own copies of Microsoft's kits
 tools/ms_oldlib.py               its fixes for the libraries of 1993-96 kits
 tools/ms-intrin-shim.h           its fix for the Server 2003 DDK's winnt.h
 tools/msvcrt-versions.txt        which msvcrt.dll has each function
 tools/gen-msvcrt-versions.py     makes msvcrt-versions.txt
 tests/                           the tests, run in Wine
+tests/ddk/                       the test driver and its tests
 ```
 
 ## The package's sysroots
@@ -420,6 +426,89 @@ which loads `tests/tlsdll.cpp` with `LoadLibrary` and uses its
 checker rejects a Vista kernel32 function and a Vista `msvcrt.dll` one. Wine does not limit programs to the
 9x API, so a real Windows 9x machine is still the final test.
 
+## Kernel-mode drivers
+
+The `*-ddk.cfg` config files build NT kernel-mode drivers (`.sys` files)
+with mingw-w64's DDK headers (`<ntddk.h>`, `<wdm.h>`, `<ntifs.h>`,
+`<ndis.h>`, ...), which every sysroot has in `include/ddk`, and its
+kernel import libraries (`-lntoskrnl`, `-lhal`, `-lndis`, `-lusbd`,
+`-lks`, ...). Like the rest of the sysroots, they hold no Microsoft files.
+
+```sh
+clang --config=winxp-ddk.cfg -O2 mydriver.c -o mydriver.sys
+clang --config=win10-x64-ddk.cfg -O2 mydriver.c -o mydriver.sys
+```
+
+| Config | For | Sysroot |
+| --- | --- | --- |
+| `nt4-ddk` | NT 4.0 (with 2000's kernel API, see below) | `win9x-msvcrt` |
+| `win2000-ddk`, `winxp-ddk` | 2000, XP | `win2k-xp` |
+| `vista-ddk`, `win7-ddk`, `win10-ddk` | Vista, 7, 10 (x86) | `win-vista` |
+| `vista-x64-ddk`, `win7-x64-ddk`, `win10-x64-ddk` | Vista, 7, 10 and 11 (x64) | `win-vista-x64` |
+
+Each one takes the program config of its Windows version (`@winxp.cfg`)
+and adds:
+
+* the DDK headers, with `_WIN32_WINNT` (and so `NTDDI_VERSION`) set to the
+  version;
+* `-nostdlib`: no C runtime, no start-up code. The kernel exports the C
+  library a driver may use (`memcpy`, `strlen`, `_snprintf`, ...), and
+  compiler-rt's builtins (`libgcc.a`) supply 64-bit division and
+  `__chkstk`;
+* the image of a driver: native subsystem, entry point `DriverEntry`,
+  base address `0x10000`, the checksum the kernel checks, not Terminal
+  Server aware;
+* for x86, `-mno-sse -mno-mmx`: a 32-bit driver must not touch the FPU,
+  MMX or SSE registers without `KeSaveFloatingPointState`. x64 drivers may
+  use SSE, as Microsoft's compiler does.
+
+Declare the entry point and dispatch routines `NTAPI` (stdcall), as
+mingw-w64's headers do: `NTSTATUS NTAPI DriverEntry(PDRIVER_OBJECT,
+PUNICODE_STRING)`. The tests are in C; C++ drivers need
+`-fno-exceptions -fno-rtti` and get no global constructors, as with
+Microsoft's kits.
+
+mingw-w64's headers start at Windows 2000 (`NTDDI_VERSION` 0x05000000),
+so `nt4-ddk` declares 2000's kernel API, and some functions it declares
+are not in NT 4.0's kernel. `check-imports.py --nt VERSION` checks a
+32-bit driver's imports from `ntoskrnl.exe`, `hal.dll`, `ndis.sys`,
+`scsiport.sys`, `videoprt.sys` and `tdi.sys` against the exports of each
+NT version from 3.1 to Server 2003 (`tools/kernel-versions.txt`, made by
+`tools/gen-kernel-versions.py` from the import libraries of the NT 3.1,
+NT 4.0, 2000, XP and Server 2003 DDKs; NT 3.5 and 3.51 count as 4.0):
+
+```sh
+python3 tools/check-imports.py --nt 4.0 mydriver.sys
+```
+
+There is no config file for NT 3.x: mingw-w64's `IoCompleteRequest` and
+`IoCallDriver` are the fastcall `IofCompleteRequest` and `IofCallDriver`
+of later kernels, which NT 3.1 does not have. Microsoft's NT 3.1 DDK,
+imported with `import-ms-sdk.py` (`ms-nt31-ddk.cfg`, below), builds
+drivers for it.
+
+`scripts/fix-ddk-headers.sh` fixes a mistake in mingw-w64's `wdm.h`
+(it tests `NTDDI_WINVISTA`, which nothing defines, so drivers for 2000
+and XP got Vista's IRP layout); `build-win9x.sh` and
+`build-modern-sysroot.sh` run it on each sysroot.
+
+Drivers for Windows 95, 98 and ME are VxDs (LE files), not PE ones, which
+these config files do not make. WDM drivers for 98 and ME are PE `.sys`
+files, but `wdm.h` for them is in the 98 and ME DDKs only.
+
+`tests/ddk/hello.c` is a small driver that makes `\Device\ClangHello` and
+answers an IOCTL with a 64-bit computation; `tests/ddk/client.c` talks to
+it. Wine runs drivers as services, so
+
+```sh
+CFGDIR=~/clang-dos/bin sh tests/ddk/run-tests.sh
+```
+
+builds it with each `*-ddk.cfg` at `-O0` and `-O2`, checks it with
+`check-imports.py`, loads it in Wine (32-bit drivers in a 32-bit prefix,
+64-bit ones in a 64-bit one) and runs the client. Wine's kernel is not
+Windows', so a real Windows is still the final test.
+
 ## Redistributing the SDK
 
 The sysroots hold no Microsoft files and can be passed on freely: see
@@ -467,6 +556,12 @@ folder instead), and every kit found there is imported. Each one becomes
 | `xp` | `5.2.3970.1830 DDK (unpacked)` | `i586-pc-windows5.1-msvc` | Server 2003 SP1 DDK, XP headers and libraries |
 | `ws03` | `5.2.3970.1830 DDK (unpacked)` | `i586-pc-windows5.2-msvc` | Server 2003 SP1 DDK |
 | `ws03-x64` | `5.2.3970.1830 DDK (unpacked)` | `x86_64-pc-windows5.2-msvc` | Server 2003 SP1 DDK, x64 |
+| `nt31-ddk` | `3.1 SDK DDK` | `i386-pc-windows3.10-msvc` | NT 3.1 DDK (MSDN, October 1994), kernel-mode drivers |
+| `nt40-ddk` | `4.0 DDK` | `i386-pc-windows4.0-msvc` | NT 4.0 DDK (4.0.1381), drivers, with the headers of `nt40` and `nt31` |
+| `w2k-ddk` | `5.2.3970.1830 DDK (unpacked)` | `i586-pc-windows5.0-msvc` | Server 2003 SP1 DDK, Windows 2000 drivers |
+| `xp-ddk` | `5.2.3970.1830 DDK (unpacked)` | `i586-pc-windows5.1-msvc` | Server 2003 SP1 DDK, XP drivers |
+| `ws03-ddk` | `5.2.3970.1830 DDK (unpacked)` | `i586-pc-windows5.2-msvc` | Server 2003 SP1 DDK, drivers |
+| `ws03-x64-ddk` | `5.2.3970.1830 DDK (unpacked)` | `x86_64-pc-windows5.2-msvc` | Server 2003 SP1 DDK, x64 drivers |
 
 * The kits are used as Microsoft shipped them, so the 1996 SDK's
   compressed `.LI_` files must be expanded first (`expand -r`) and the
@@ -509,11 +604,31 @@ folder instead), and every kit found there is imported. Each one becomes
   includes, which come from `inc/wnet`.
 * C only: the kits' C++ libraries are for Microsoft's compilers of the
   time.
+* The `-ddk` kits build kernel-mode drivers (`clang --config=ms-xp-ddk.cfg
+  -O2 mydriver.c -o mydriver.sys`), with the DDK's `ntddk.h`, `wdm.h` and
+  the rest before its Windows headers, and its `ntoskrnl.lib`, `hal.lib`
+  and kernel C library (`libcntpr.lib`, NT 3.1's `libcnt.lib`; with
+  `bufferoverflowk` for the `/GS` ones) instead of a C runtime. Their
+  config files define what the DDKs' `build` did for a driver (`_X86_`,
+  `i386`, `STD_CALL`, `CONDITION_HANDLING`, `_NT1X_`, `WINNT`,
+  `_WIN32_WINNT` and `WINVER` for the triple's version, ...) and pass
+  `-mrtd`, since the DDKs built drivers with `cl /Gz` and declare dispatch
+  routines and the like without a calling convention. The linker makes a
+  driver image: `-driver`, native subsystem of the triple's version, entry
+  point `DriverEntry`, base `0x10000`, checksum, the `PAGE` and `INIT`
+  sections of `alloc_text`, with `INIT` discardable. A few mistakes in the
+  DDKs' `ntddk.h` that `cl` accepted are fixed in the sysroot's copy (the
+  2000 and XP DDKs declare `_InterlockedXor` with a `LONG` for its
+  pointer; NT 4.0 to XP read a byte of the KPCR in inline assembly
+  without saying its size). The Windows Vista WDK and later are not
+  supported yet.
 
-`tests/ms-sdk/run-test.sh` tests the script with two small fake kits.
+`tests/ms-sdk/run-test.sh` tests the script with three small fake kits.
 `tests/ms-sdk/kits-test.py PACKAGE --run` builds and runs a program with
-each imported kit, for testing with the real ones: all seven built and ran
-on Windows 11 at `-O0` and `-O2`.
+each imported kit, for testing with the real ones: all seven user-mode ones
+built and ran on Windows 11 at `-O0` and `-O2`. With `--wine` it runs them
+in Wine and also loads `tests/ddk/hello.c` built with each `-ddk` kit as a
+Wine service: the six of them work in Wine 9.0.
 
 ## License
 

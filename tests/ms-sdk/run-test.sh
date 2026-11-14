@@ -95,6 +95,43 @@ for i in range(nsec):
         assert flags & 0x80000000, hex(flags)
 print("hello.exe: subsystem console 3.51, OS 3.51, .rdata writable")
 EOF
+# A kernel-mode kit: a fake Windows 2000 DDK laid out as the Server 2003 SP1
+# DDK is, with an ntddk.h and ntoskrnl, hal and libcntpr libraries. Its
+# config file makes a driver: native subsystem 5.0, entry DriverEntry,
+# stdcall by default (/Gz), importing from ntoskrnl.exe.
+ddk=$sdks/"5.2.3970.1830 DDK (unpacked)"/WINDDK
+for d in inc/ddk/w2k inc/ddk/wdm/w2k inc/w2k inc/crt inc/wnet lib/w2k/i386; do
+  mkdir -p "$ddk/$d"
+done
+cp "$here/NTDDK.H" "$ddk/inc/ddk/w2k/ntddk.h"
+cp "$here/STDIO.H" "$ddk/inc/crt/string.h"
+printf 'LIBRARY ntoskrnl.exe\nEXPORTS\nIoCreateDevice@28\nDbgPrint\n' \
+  > "$W/ntoskrnl.def"
+"$BIN/llvm-dlltool" -m i386 -k -d "$W/ntoskrnl.def" -l "$ddk/lib/w2k/i386/ntoskrnl.lib"
+printf 'LIBRARY hal.dll\nEXPORTS\nKeGetCurrentIrql\n' > "$W/hal.def"
+"$BIN/llvm-dlltool" -m i386 -k -d "$W/hal.def" -l "$ddk/lib/w2k/i386/hal.lib"
+"$BIN/llvm-ar" rc "$ddk/lib/w2k/i386/libcntpr.lib"
+"$BIN/llvm-ar" rc "$ddk/lib/w2k/i386/BufferOverflowK.lib"
+${PYTHON:-python3} "$import" --sdks "$sdks" "$pkg" w2k-ddk
+dcfg=$pkg/bin/ms-w2k-ddk.cfg
+grep -q i586-pc-windows5.0-msvc "$dcfg"
+grep -q "dependent-lib=ntoskrnl$" "$dcfg"
+"$BIN/clang" --config="$dcfg" -O2 "$here/driver.c" -o "$W/driver.sys"
+python3 - "$W/driver.sys" <<'PY'
+import struct, sys
+d = open(sys.argv[1], "rb").read()
+pe = struct.unpack_from("<I", d, 0x3c)[0]
+opt = pe + 24
+subv = struct.unpack_from("<HH", d, opt + 48)
+sub = struct.unpack_from("<H", d, opt + 68)[0]
+csum = struct.unpack_from("<I", d, opt + 64)[0]
+assert subv == (5, 0), subv
+assert sub == 1, sub  # native
+assert csum, "no checksum"
+assert b"ntoskrnl.exe" in d and b"IoCreateDevice" in d
+print("driver.sys: subsystem native 5.0, checksum, imports ntoskrnl.exe")
+PY
+
 if command -v wine >/dev/null 2>&1; then
   out=$(wine "$W/hello.exe" 2>/dev/null | tr -d '\r')
   test "$out" = "hello from a fake kit" || { echo "wine: $out"; exit 1; }

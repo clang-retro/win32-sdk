@@ -45,6 +45,10 @@ mkdir -p "$WORK/headers"
     --prefix="$SYSROOT" --with-default-win32-winnt=$WINNT \
     --with-default-msvcrt=$CRT >/dev/null &&
   make install >/dev/null)
+# mingw-w64's DDK headers, for the *-ddk.cfg drivers (next to this script;
+# a copy of the script on its own skips it).
+fix=$(dirname "$0")/fix-ddk-headers.sh
+if [ -f "$fix" ]; then sh "$fix" "$SYSROOT"; fi
 
 # CRT and import libraries, against the C runtime DLL that ships with Windows.
 mkdir -p "$WORK/crt"
