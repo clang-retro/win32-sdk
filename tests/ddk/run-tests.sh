@@ -10,7 +10,9 @@
 #            32-bit prefix (WINEPREFIX32, made with WINEARCH=win32 if it
 #            does not exist), 64-bit ones a 64-bit one (WINEPREFIX64,
 #            default: WINEPREFIX or ~/.wine)
-#   CONFIGS  the configs (default: every *-ddk.cfg in CFGDIR)
+#   CONFIGS  the configs (default: every *-ddk.cfg in CFGDIR but the ms-*
+#            ones of imported Microsoft DDKs, which tests/ms-sdk/kits-test.py
+#            tests)
 #   WORK     build folder (default: ./build-ddk-tests)
 : "${CFGDIR:?set CFGDIR}"
 here=$(cd "$(dirname "$0")" && pwd)
@@ -51,17 +53,23 @@ rundrv() {
 }
 
 if [ -n "$WINE" ]; then
-  [ -d "$WINEPREFIX32" ] || WINEPREFIX=$WINEPREFIX32 WINEARCH=win32 \
-    "$WINE" wineboot -i >/dev/null 2>&1
-  [ -d "$WINEPREFIX64" ] || WINEPREFIX=$WINEPREFIX64 \
-    "$WINE" wineboot -i >/dev/null 2>&1
+  # A new prefix: let the wineserver that made it exit first, as drivers
+  # started under it do not stay loaded.
+  if [ ! -d "$WINEPREFIX32" ]; then
+    WINEPREFIX=$WINEPREFIX32 WINEARCH=win32 "$WINE" wineboot -i >/dev/null 2>&1
+    WINEPREFIX=$WINEPREFIX32 "${WINESERVER:-wineserver}" -w >/dev/null 2>&1
+  fi
+  if [ ! -d "$WINEPREFIX64" ]; then
+    WINEPREFIX=$WINEPREFIX64 "$WINE" wineboot -i >/dev/null 2>&1
+    WINEPREFIX=$WINEPREFIX64 "${WINESERVER:-wineserver}" -w >/dev/null 2>&1
+  fi
   "$CFGDIR/clang" --config="$CFGDIR/winxp.cfg" -O2 "$here/client.c" \
     -o client32.exe >client32.log 2>&1 || bad client32 client32.log
   "$CFGDIR/clang" --config="$CFGDIR/win7-x64.cfg" -O2 "$here/client.c" \
     -o client64.exe >client64.log 2>&1 || bad client64 client64.log
 fi
 
-for cfg in ${CONFIGS:-$(cd "$CFGDIR" && ls *-ddk.cfg)}; do
+for cfg in ${CONFIGS:-$(cd "$CFGDIR" && ls *-ddk.cfg | grep -v "^ms-")}; do
   name=${cfg%.cfg}
   for opt in O0 O2; do
     t=$name-$opt

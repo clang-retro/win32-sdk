@@ -492,9 +492,9 @@ drivers for it.
 and XP got Vista's IRP layout); `build-win9x.sh` and
 `build-modern-sysroot.sh` run it on each sysroot.
 
-Drivers for Windows 95, 98 and ME are VxDs (LE files), not PE ones, which
-these config files do not make. WDM drivers for 98 and ME are PE `.sys`
-files, but `wdm.h` for them is in the 98 and ME DDKs only.
+Drivers for Windows 95, 98 and ME are mostly VxDs (LE files, below), not
+PE ones. WDM drivers for 98 and ME are PE `.sys` files, but `wdm.h` for
+them is in the 98 and ME DDKs only.
 
 `tests/ddk/hello.c` is a small driver that makes `\Device\ClangHello` and
 answers an IOCTL with a 64-bit computation; `tests/ddk/client.c` talks to
@@ -508,6 +508,52 @@ builds it with each `*-ddk.cfg` at `-O0` and `-O2`, checks it with
 `check-imports.py`, loads it in Wine (32-bit drivers in a 32-bit prefix,
 64-bit ones in a 64-bit one) and runs the client. Wine's kernel is not
 Windows', so a real Windows is still the final test.
+
+### VxDs for Windows 3.1, 95, 98 and ME
+
+A VxD is a 32-bit virtual device driver in the LE format, run by the VMM
+in ring 0. `win95-vxd.cfg` compiles one (freestanding, no FPU or SSE, no
+stack protector or unwind tables) and `tools/vxd-link.py` links it with
+JWlink:
+
+```sh
+clang --config=win95-vxd.cfg -O2 -c hello.c -o hello.o
+python3 share/clang-dos/vxd-link.py -o HELLO.VXD hello.o
+python3 share/clang-dos/vxd-check.py --dynamic HELLO.VXD
+```
+
+`<vxd.h>` has what a VxD written in C needs, with no Microsoft headers:
+
+- `VXD_DEVICE(NAME, ID, INIT_ORDER, MAJOR, MINOR)` defines the device
+  descriptor block `NAME_DDB` (exported as ordinal 1, as the VMM wants)
+  and an assembly control procedure. That procedure saves the registers
+  and calls `int vxd_control(DWORD msg, struct vxd_regs *r)`. Return 0 for
+  success (carry clear) and nonzero for failure; change `r->eax` and the
+  other fields to return values in registers.
+- The control messages (`SYS_DYNAMIC_DEVICE_INIT`, `W32_DEVICEIOCONTROL`,
+  ...), `struct DIOCParams`, and `DIOC_OPEN` and `DIOC_CLOSEHANDLE`.
+- `VXD_SERVICE(device, number)` and `VXD_INT20` for calling VMM and VxD
+  services with `int 20h`, plus `VMMCALL_Get_VMM_Version`,
+  `VMMCALL_Get_Cur_VM_Handle` and `VMMCALL_Get_Sys_VM_Handle`.
+- `libvxd.a` provides `memcpy`, `memmove`, `memset`, `memcmp` and
+  `strlen`. `libgcc.a` provides the 64-bit arithmetic.
+
+`vxd-link.py` writes a dynamic VxD by default, the kind Win32 programs
+load with `CreateFile("\\\\.\\C:\\PATH\\HELLO.VXD", ...)` and call
+with `DeviceIoControl`. `--static` writes one that SYSTEM.INI loads with
+`device=`. `--win31` writes a Windows 3.1 VxD; compile it with
+`win31-vxd.cfg`, which sets `VXD_DDK_VERSION` to 3.10. The VxD's name
+defaults to the output's base name in upper case (at most 8 letters), and
+it must match the `NAME` given to `VXD_DEVICE`. `vxd-check.py` checks the
+LE header, the DDB and the control procedure.
+
+`vxd/hello.c` is a dynamic VxD that answers an IOCTL with a 64-bit
+computation and the VMM's version, and `vxd/client.c` is its Win32
+client. `CFGDIR=~/clang-dos/bin sh vxd/run-tests.sh` builds it as a
+dynamic, static and Windows 3.1 VxD at `-O0`, `-O2` and `-Os`, and checks
+each build. No emulator runs VxDs, so with `WIN9X_RUN` set to a command
+that runs `CLIENT.EXE` on a real Windows 9x, the dynamic ones are loaded
+too.
 
 ## Redistributing the SDK
 
