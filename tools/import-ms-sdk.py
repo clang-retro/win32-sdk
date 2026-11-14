@@ -18,9 +18,12 @@ For each KIT it writes
     PACKAGE/bin/ms-KIT.cfg             the config file
 
 and programs are then built with `clang --config=ms-KIT.cfg`. A kit that has
-no C runtime of its own takes one from the kit in its "crt" entry.
+no C runtime of its own takes one from the kit in its "crt" entry. The
+kernel-mode kits (the KIT-ddk ones) build drivers instead: their config
+files link the kernel and its C library and make a driver image.
 
-The headers and libraries are copied unchanged except for the names. On a
+The headers and libraries are copied unchanged except for the names (and
+the few mistakes in the DDKs' headers in HEADER_FIXES). On a
 case-sensitive file system the overlay in vfs.yaml lets `#include
 <Windows.h>` and a library's `/DEFAULTLIB:LIBC` find `windows.h` and
 `libc.lib`, as on Windows.
@@ -29,6 +32,7 @@ case-sensitive file system the overlay in vfs.yaml lets `#include
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -116,6 +120,87 @@ KITS = {
         "gs": True,
         "intrin-shim": True,
     },
+    # Kernel-mode kits: the DDKs' headers and libraries for drivers (.sys),
+    # built with `clang --config=ms-KIT.cfg` too. "kcrt" is the kernel's C
+    # library (string functions, 64-bit arithmetic, SEH) in the kit.
+    "nt31-ddk": {
+        "name": "Windows NT 3.1 DDK (MSDN, October 1994), drivers",
+        "folder": "3.1 SDK DDK",
+        "triple": "i386-pc-windows3.10-msvc",
+        "msc": "8.0",
+        # The DDK's ntddk.h, then the SDK's C headers (string.h, ...).
+        "include": ["sdk/DDK/INC", "sdk/MSTOOLS/H"],
+        "lib": ["sdk/DDK/LIB/I386/FREE"],
+        "kernel": True,
+        "kcrt": ["libcnt"],
+        "old": True,
+    },
+    "nt40-ddk": {
+        "name": "Windows NT 4.0 DDK (4.0.1381), drivers",
+        "folder": "4.0 DDK",
+        "triple": "i386-pc-windows4.0-msvc",
+        "msc": "10.20",
+        "include": ["ddk/ddk/inc"],
+        "lib": ["ddk/ddk/lib/i386/free"],
+        # The DDK has neither the SDK's pshpack*.h nor C headers: the Win32
+        # SDK's of the same release and NT 3.1's C headers.
+        "headers-from": ["nt40", "nt31"],
+        "kernel": True,
+        "kcrt": ["libcntpr"],
+        "old": True,
+    },
+    "w2k-ddk": {
+        "name": "Windows 2000 drivers, from the Windows Server 2003 SP1 DDK "
+                "(3790.1830)",
+        "folder": "5.2.3970.1830 DDK (unpacked)",
+        "triple": "i586-pc-windows5.0-msvc",
+        "msc": "14.0",
+        "include": ["WINDDK/inc/ddk/w2k", "WINDDK/inc/ddk/wdm/w2k",
+                    "WINDDK/inc/w2k", "WINDDK/inc/crt", "WINDDK/inc/wnet"],
+        "lib": ["WINDDK/lib/w2k/i386"],
+        "kernel": True,
+        "kcrt": ["libcntpr"],
+        "gs": True,
+    },
+    "xp-ddk": {
+        "name": "Windows XP drivers, from the Windows Server 2003 SP1 DDK "
+                "(3790.1830)",
+        "folder": "5.2.3970.1830 DDK (unpacked)",
+        "triple": "i586-pc-windows5.1-msvc",
+        "msc": "14.0",
+        "include": ["WINDDK/inc/ddk/wxp", "WINDDK/inc/ddk/wdm/wxp",
+                    "WINDDK/inc/wxp", "WINDDK/inc/crt", "WINDDK/inc/wnet"],
+        "lib": ["WINDDK/lib/wxp/i386"],
+        "kernel": True,
+        "kcrt": ["libcntpr"],
+        "gs": True,
+    },
+    "ws03-ddk": {
+        "name": "Windows Server 2003 SP1 DDK (3790.1830), x86 drivers",
+        "folder": "5.2.3970.1830 DDK (unpacked)",
+        "triple": "i586-pc-windows5.2-msvc",
+        "msc": "14.0",
+        "include": ["WINDDK/inc/ddk/wnet", "WINDDK/inc/ddk/wdm/wnet",
+                    "WINDDK/inc/wnet", "WINDDK/inc/crt"],
+        "lib": ["WINDDK/lib/wnet/i386"],
+        "kernel": True,
+        "kcrt": ["libcntpr"],
+        "gs": True,
+        "intrin-shim": True,
+    },
+    "ws03-x64-ddk": {
+        "name": "Windows Server 2003 SP1 DDK (3790.1830), x64 drivers",
+        "folder": "5.2.3970.1830 DDK (unpacked)",
+        "triple": "x86_64-pc-windows5.2-msvc",
+        "msc": "14.0",
+        "include": ["WINDDK/inc/ddk/wnet", "WINDDK/inc/ddk/wdm/wnet",
+                    "WINDDK/inc/wnet", "WINDDK/inc/crt"],
+        "lib": ["WINDDK/lib/wnet/amd64"],
+        "kernel": True,
+        "kcrt": ["libcntpr"],
+        "gs": True,
+        "intrin-shim": True,
+    },
 }
 
 
@@ -193,7 +278,51 @@ def write_vfs(sysroot, includes, libs):
         f.write("\n")
 
 
-def write_cfg(path, kit, sysname, triple, msc, defines, crtlibs, vfs, extra):
+def kernel_defines(triple):
+    """The macros the DDKs' build utility defines for a driver (from their
+    makefile.def and i386mk.inc), for the Windows version in the triple."""
+    v = re.search(r"windows(\d+)\.(\d+)", triple)
+    ver = "0x%02X%02X" % (int(v.group(1)), int(v.group(2)))
+    out = ["_NT1X_=100", "WINNT=1", "_WIN32_WINNT=" + ver, "WINVER=" + ver,
+           "WIN32=100", "STD_CALL", "CONDITION_HANDLING=1", "NT_INST=0",
+           "NT_UP=1", "DEVL=1"]
+    if triple.startswith("x86_64"):
+        out += ["_WIN64", "_AMD64_", "AMD64"]
+    else:
+        out += ["i386=1", "FPO=1"]
+    return out
+
+
+def kernel_flags(triple):
+    """Compiler and linker flags for a kernel-mode driver."""
+    v = re.search(r"windows(\d+)\.(\d+)", triple)
+    ver = "%d.%02d" % (int(v.group(1)), int(v.group(2)))
+    out = [
+        # Drivers are not C++ programs with exceptions and RTTI (cl's
+        # /kernel), and 32-bit ones must not touch the FPU or SSE registers
+        # without KeSaveFloatingPointState.
+        "-fno-exceptions -fno-rtti",
+        # The image: native subsystem, entry point DriverEntry, checksum
+        # (the kernel checks it), at the DDK's base address.
+        "-Wl,-driver -Xlinker -subsystem:native,%s -Xlinker -osversion:%s"
+        % (ver, ver),
+        "-Wl,-entry:DriverEntry",
+        "-Wl,-base:0x10000 -Wl,-release",
+        # The DDK's alloc_text sections: INIT is thrown away after
+        # DriverEntry, PAGE* can be paged out. (-Xlinker: -Wl would split
+        # INIT,d at the comma.)
+        "-Wl,-merge:_PAGE=PAGE -Wl,-merge:_TEXT=.text -Xlinker -section:INIT,d",
+    ]
+    if not triple.startswith("x86_64"):
+        # The DDKs build 32-bit drivers with cl /Gz, and their headers rely
+        # on it: dispatch routines and the like are declared without a
+        # calling convention, and are __stdcall.
+        out.insert(1, "-mno-sse -mno-mmx -mrtd")
+    return out
+
+
+def write_cfg(path, kit, sysname, triple, msc, defines, crtlibs, vfs, extra,
+              kernel=False):
     lines = [
         "# %s (imported with import-ms-sdk.py)" % kit,
         "--target=%s" % triple,
@@ -209,7 +338,8 @@ def write_cfg(path, kit, sysname, triple, msc, defines, crtlibs, vfs, extra):
         # Link the kit's C runtime, not clang's default libcmt and oldnames,
         # which an old kit may not have. -fms-omit-default-lib keeps them out
         # of the objects and -nostartfiles off the link.
-        "-fms-omit-default-lib -nostartfiles",
+        "-fms-omit-default-lib -nostartfiles" + (" -nostdlib" if kernel
+                                                  else ""),
     ]
     if vfs:
         lines.append("-vfsoverlay <CFGDIR>/../sysroots/%s/vfs.yaml" % sysname)
@@ -261,13 +391,25 @@ def import_kit(name, kitdirs, package, llvm_lib):
         # Its headers come after the kit's own, so they only add the C
         # runtime's, and its libraries come after the kit's.
         incdirs += find(kitdirs[kit["crt"]], crt["include"])
-        crtlibdirs = find(kitdirs[kit["crt"]], crt["lib"])
+        # A driver takes only the C headers: its C library is the kernel's.
+        if not kit.get("kernel"):
+            crtlibdirs = find(kitdirs[kit["crt"]], crt["lib"])
+
+    for k in kit.get("headers-from", []):
+        # Headers only, after the kit's own.
+        if k not in kitdirs:
+            print("%s: needs the headers of kit %s" % (name, k),
+                  file=sys.stderr)
+            return False
+        incdirs += find(kitdirs[k], KITS[k]["include"])
 
     sysname = "ms-" + name
     sysroot = os.path.join(package, "sysroots", sysname)
     if os.path.exists(sysroot):
         shutil.rmtree(sysroot)
     includes = lower_tree(incdirs, os.path.join(sysroot, "include"), "include")
+    for n in fix_headers(name, os.path.join(sysroot, "include")):
+        print("%s: %s" % (name, n))
     libs = lower_tree(libdirs, os.path.join(sysroot, "lib"), "lib")
     if crtlibdirs:
         # Only the C runtime from the other kit, not its Windows libraries.
@@ -280,10 +422,13 @@ def import_kit(name, kitdirs, package, llvm_lib):
                 libs.append(f)
         shutil.rmtree(os.path.join(sysroot, "crt.tmp"))
         libs.sort()
-    for need in ("windows.h", "stdio.h"):
+    kernel = kit.get("kernel")
+    for need in ("ntddk.h", "string.h") if kernel else ("windows.h",
+                                                         "stdio.h"):
         if need not in includes:
             print("%s: warning: no %s" % (name, need), file=sys.stderr)
-    for need in ("kernel32.lib", "user32.lib"):
+    for need in (("ntoskrnl.lib", "hal.lib") if kernel else
+                 ("kernel32.lib", "user32.lib")):
         if need not in libs:
             print("%s: warning: no %s" % (name, need), file=sys.stderr)
     extra = []
@@ -302,9 +447,14 @@ def import_kit(name, kitdirs, package, llvm_lib):
             print("%s: warning: no ll64.lib (needs the ws03 kit): 64-bit "
                   "division won't link" % name, file=sys.stderr)
         # Its libcmt asks for no kernel32 and has no SafeSEH tables.
-        extra += ["-Xclang --dependent-lib=kernel32", "-Wl,-safeseh:no"]
+        if not kernel:
+            extra.append("-Xclang --dependent-lib=kernel32")
+        extra.append("-Wl,-safeseh:no")
     if kit.get("gs"):
-        extra.append("-Xclang --dependent-lib=bufferoverflowu")
+        # The security cookie for the C library's /GS checks: the kernel's
+        # own for drivers.
+        extra.append("-Xclang --dependent-lib=bufferoverflow%s"
+                     % ("k" if kernel else "u"))
     if kit.get("intrin-shim"):
         shutil.copyfile(os.path.join(HERE, "ms-intrin-shim.h"),
                         os.path.join(sysroot, "include", SHIM))
@@ -316,12 +466,18 @@ def import_kit(name, kitdirs, package, llvm_lib):
         write_vfs(sysroot, includes, libs)
 
     # The C runtime: the multithreaded static one if the kit has it (clang
-    # defines _MT as for it), else the single-threaded one.
-    crtlibs = [l[:-4] for l in ("libcmt.lib", "libc.lib") if l in libs][:1]
+    # defines _MT as for it), else the single-threaded one. A driver links
+    # the kernel and its C library instead.
+    if kernel:
+        crtlibs = [l for l in ["ntoskrnl", "hal"] + kit["kcrt"]
+                   if l + ".lib" in libs]
+    else:
+        crtlibs = [l[:-4] for l in ("libcmt.lib", "libc.lib")
+                   if l in libs][:1]
     if not crtlibs:
         print("%s: warning: no libcmt.lib or libc.lib: no C runtime" % name,
               file=sys.stderr)
-    if "oldnames.lib" in libs:
+    if "oldnames.lib" in libs and not kernel:
         crtlibs.append("oldnames")
 
     defines = []
@@ -333,11 +489,56 @@ def import_kit(name, kitdirs, package, llvm_lib):
         defines.append("_AMD64_=1")
     os.makedirs(os.path.join(package, "bin"), exist_ok=True)
     cfg = os.path.join(package, "bin", sysname + ".cfg")
+    if kernel:
+        defines += kernel_defines(kit["triple"])
+        extra = kernel_flags(kit["triple"]) + extra
     write_cfg(cfg, kit["name"], sysname, kit["triple"], kit["msc"], defines,
-              crtlibs, os.name != "nt", extra)
+              crtlibs, os.name != "nt", extra, kernel)
     print("%s: %d headers, %d libraries -> bin/%s.cfg" %
           (sysname, len(includes), len(libs), sysname))
     return True
+
+
+# Mistakes in the DDKs' headers that cl accepts and clang does not: the
+# header, the text to replace and with what. They are fixed in the copies of
+# every kernel-mode kit that has them, never in the kits.
+HEADER_FIXES = {
+    "ntddk.h": [
+        # The 2000 and XP DDKs declare _InterlockedXor with a LONG for the
+        # pointer (cl ignores declarations of its intrinsics).
+        ("_InterlockedXor (\n    IN OUT LONG volatile Target,",
+         "_InterlockedXor (\n    IN OUT LONG volatile *Target,"),
+        # Inline assembly that reads a UCHAR field of the KPCR without
+        # saying its size (NT 4.0 to XP).
+        ("movzx eax, _PCR KPCR.Number", "movzx eax, byte ptr _PCR KPCR.Number"),
+    ],
+}
+
+
+def fix_headers(name, incdir):
+    notes = []
+    if not KITS[name].get("kernel"):
+        return notes
+    for hdr, fixes in HEADER_FIXES.items():
+        p = os.path.join(incdir, hdr)
+        if not os.path.exists(p):
+            continue
+        with open(p, "rb") as f:
+            data = f.read()
+        crlf = b"\r\n" in data
+        text = data.decode("latin-1").replace("\r\n", "\n")
+        done = 0
+        for old, new in fixes:
+            if old in text:
+                text = text.replace(old, new)
+                done += 1
+        if done:
+            if crlf:
+                text = text.replace("\n", "\r\n")
+            with open(p, "wb") as f:
+                f.write(text.encode("latin-1"))
+            notes.append("fixed %d mistakes in %s" % (done, hdr))
+    return notes
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -394,6 +595,12 @@ CRTLIBS = ["libc.lib", "libcmt.lib", "oldnames.lib", "crtdll.lib",
            "chkstk.obj"]
 
 
+def complete(name, kitdirs):
+    kit = KITS[name]
+    want = kit["include"] + kit["lib"]
+    return len(find(kitdirs[name], want)) == len(want)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("package", nargs="?", help="toolchain package folder")
@@ -429,7 +636,10 @@ def main():
         if k not in KITS or not d:
             ap.error("bad --kit-dir %s" % kd)
         kitdirs[k] = d
-    names = a.kits or [k for k in KITS if k in kitdirs]
+    # Without KITs, every kit whose folders are all there: some kits share
+    # a folder (an SDK and its DDK, a DDK's versions), and a copy of the
+    # folder may hold only one of them.
+    names = a.kits or [k for k in KITS if k in kitdirs and complete(k, kitdirs)]
     llvm_lib = a.llvm_lib or os.path.join(
         a.package, "bin", "llvm-lib" + (".exe" if os.name == "nt" else ""))
     if any(KITS[k].get("old") for k in names) and not os.path.exists(llvm_lib):

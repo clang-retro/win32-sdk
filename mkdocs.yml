@@ -28,6 +28,7 @@ nav:
   - "Windows 2000 and XP": win2k-xp.md
   - "C++": cxx.md
   - "picolibc instead of the CRT": picolibc.md
+  - "Kernel-mode drivers": drivers.md
   - "Checks and tests": checks.md
   - "Microsoft's SDKs and DDKs": ms-sdks.md
   - "Redistributing": redistributing.md
