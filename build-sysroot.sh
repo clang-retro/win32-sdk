@@ -63,6 +63,14 @@ win-vista-x64)
 *)
   echo "unknown sysroot $name" >&2; exit 1 ;;
 esac
+# Visual C++'s COM support library, for comdef.h and #import.
+case $name in
+win2k-xp) cpu=i586 target=i686-w64-windows-gnu ;;
+win-vista) cpu=i686 target=i686-w64-windows-gnu ;;
+win-vista-x64) cpu= target=x86_64-w64-windows-gnu ;;
+*) cpu=i386 target=i686-w64-windows-gnu ;;
+esac
+WORK=$WORK/comsupp CPU=$cpu TARGET=$target sh "$here/scripts/build-comsupp.sh"
 # IDL files and the stdole type libraries, for midl.
 case $name in
 win-vista-x64) idl_env=win64 ;;
