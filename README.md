@@ -728,6 +728,20 @@ Pick one Microsoft didn't assign; the tests use 0x3E5A.
   `VXD_C_SERVICE(Call_Name, ID, N)` and a prototype, then calls
   `Call_Name(...)`.
 
+`<vcomm.h>` (which includes `<vxd.h>`) is for VCOMM port drivers, the
+VxDs that drive a serial or parallel port for VCOMM on Windows 95, 98 and
+ME. It has `PortFunctions`, the table of the driver's 23 port functions
+(`PortSetCommState` to `PortDeviceIOCtl`, as typed function pointers),
+`PortData`, the state of an open port that `PortOpen` returns, and the
+`_DCB`, `_COMMPROP`, `_COMSTAT`, `COMMTIMEOUTS` and `IORequest` structures
+they take, with their constants (`IE_*`, `EV_*`, `CE_*`, `MS_*`, the DCB's
+`f*` masks, `BAUD_*`, the escape functions and so on). Their layouts and
+values are the 95, 98 and ME DDKs' (packed, as the DDK builds them). These
+are VCOMM's versions of the DCB and COMMPROP, not `<winbase.h>`'s, so a
+file can't include both. A driver calls `_VCOMM_Register_Port_Driver` from
+`Sys_Dynamic_Device_Init`, and `_VCOMM_Add_Port` from the function it
+registered. `vxd/portdrv.c` is a loopback port driver built that way.
+
 `vxd-link.py --version 1.2.3.4` adds a VERSIONINFO resource the way
 Microsoft's VxDs carry one, with `--product-version`, `--description`,
 `--company`, `--product` and `--copyright` for its strings. The resource
