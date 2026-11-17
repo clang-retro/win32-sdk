@@ -573,10 +573,17 @@ def import_kit(name, kitdirs, package, llvm_lib):
         # link the package's (libntseh.a, which build-win9x.sh makes).
         kcrt = [os.path.join(sysroot, "lib", l + ".lib")
                 for l in kit["kcrt"] if l + ".lib" in libs]
+        ntseh = os.path.join(package, "sysroots", "win9x-msvcrt", "lib",
+                             "libntseh.a")
         if not kit["triple"].startswith("x86_64") and not any(
                 b"__except_handler3" in open(f, "rb").read() for f in kcrt):
-            extra.append("-Wl,<CFGDIR>/../sysroots/win9x-msvcrt/lib/"
-                         "libntseh.a")
+            if os.path.exists(ntseh):
+                extra.append("-Wl,<CFGDIR>/../sysroots/win9x-msvcrt/lib/"
+                             "libntseh.a")
+            else:
+                print("%s: warning: no _except_handler3 and no "
+                      "sysroots/win9x-msvcrt/lib/libntseh.a: __try won't "
+                      "link" % name, file=sys.stderr)
     write_cfg(cfg, kit["name"], sysname, kit["triple"], kit["msc"], defines,
               crtlibs, os.name != "nt", extra, kernel)
     print("%s: %d headers, %d libraries -> bin/%s.cfg" %
