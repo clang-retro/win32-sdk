@@ -362,6 +362,9 @@ def kernel_flags(triple):
         # /kernel), and 32-bit ones must not touch the FPU or SSE registers
         # without KeSaveFloatingPointState.
         "-fno-exceptions -fno-rtti",
+        # cl's __try catches the processor's exceptions (a bad pointer, a
+        # division by zero) in any instruction, not just in calls.
+        "-fasync-exceptions",
         # The image: native subsystem, entry point DriverEntry, checksum
         # (the kernel checks it), at the DDK's base address.
         "-Wl,-driver -Xlinker -subsystem:native,%s -Xlinker -osversion:%s"
@@ -401,6 +404,14 @@ def write_cfg(path, kit, sysname, triple, msc, defines, crtlibs, vfs, extra,
         "-fms-omit-default-lib -nostartfiles" + (" -nostdlib" if kernel
                                                   else ""),
     ]
+    # cl's volatile has acquire and release semantics on x86 (/volatile:ms,
+    # clang's -fms-volatile, the default for the msvc triples), which
+    # clang makes atomic accesses; for a 386 those become calls to
+    # __sync_lock_test_and_set_4, which no kit has. Without it volatile
+    # accesses are plain moves, which x86 processors keep in order; only
+    # the compiler may move other memory accesses across them.
+    if triple.startswith("i386"):
+        lines.append("-fno-ms-volatile")
     if vfs:
         lines.append("-vfsoverlay <CFGDIR>/../sysroots/%s/vfs.yaml" % sysname)
     lines += ["-Xclang --dependent-lib=%s" % l for l in crtlibs]
@@ -557,6 +568,15 @@ def import_kit(name, kitdirs, package, llvm_lib):
     if kernel:
         defines += kernel_defines(kit["triple"])
         extra = kernel_flags(kit["triple"]) + extra
+        # clang's 32-bit __try takes _except_handler3, which the NT 3.1
+        # DDK's C library does not have (cl 8.0 called _except_handler2):
+        # link the package's (libntseh.a, which build-win9x.sh makes).
+        kcrt = [os.path.join(sysroot, "lib", l + ".lib")
+                for l in kit["kcrt"] if l + ".lib" in libs]
+        if not kit["triple"].startswith("x86_64") and not any(
+                b"__except_handler3" in open(f, "rb").read() for f in kcrt):
+            extra.append("-Wl,<CFGDIR>/../sysroots/win9x-msvcrt/lib/"
+                         "libntseh.a")
     write_cfg(cfg, kit["name"], sysname, kit["triple"], kit["msc"], defines,
               crtlibs, os.name != "nt", extra, kernel)
     print("%s: %d headers, %d libraries -> bin/%s.cfg" %
@@ -711,6 +731,9 @@ def import_vxd_kit(name, kitdirs, package):
         "-Wno-nonportable-include-path",
         "-Wno-gnu-zero-variadic-macro-arguments",
     ]
+    # As in write_cfg: a 386 has no atomic exchange clang can use.
+    if kit["triple"].startswith("i386"):
+        lines.append("-fno-ms-volatile")
     if os.name != "nt":
         lines.append("-vfsoverlay <CFGDIR>/../sysroots/%s/vfs.yaml" % sysname)
     lines += ["-D%s" % d for d in kit["vxd"]]

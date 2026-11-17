@@ -530,6 +530,22 @@ and adds:
   MMX or SSE registers without `KeSaveFloatingPointState`. x64 drivers may
   use SSE, as Microsoft's compiler does.
 
+Structured exception handling works as with Microsoft's compiler:
+`__try`, `__except`, `__finally`, `__leave`, `GetExceptionCode()` and
+`GetExceptionInformation()`, with `-fms-extensions -fasync-exceptions`
+(`cl /EHa`'s behaviour: a bad pointer or a division by zero in any
+instruction of a `__try` reaches its `__except`, as drivers expect when
+they probe user buffers with `ProbeForRead`). x64 drivers use the
+kernel's `__C_specific_handler`. 32-bit ones use `_except_handler3`,
+which the 2000 and later kernels export but NT 4.0's and the 98 and ME
+NTKERN's do not, so the x86 configs link `libntseh.a`, this SDK's own
+`_except_handler3` (`kernel/except3.S`, which needs only `RtlUnwind`
+from the kernel); `build-win9x.sh` and `build-modern-sysroot.sh` build
+it. The 32-bit configs also pass `-fseh-exceptions`, the exception model
+whose tables `__try` needs on MinGW. This needs the clang of clang-retro's
+LLVM from November 2026 on: older ones leave 32-bit `__try`'s scope
+table undefined and ignore `-fasync-exceptions` for MinGW.
+
 Declare the entry point and dispatch routines `NTAPI` (stdcall), as
 mingw-w64's headers do: `NTSTATUS NTAPI DriverEntry(PDRIVER_OBJECT,
 PUNICODE_STRING)`. The tests are in C; C++ drivers need
@@ -573,8 +589,9 @@ and `RtlZeroMemory`, and lacks two of 98's. The `ms-w98-wdm` kit (below)
 builds with the 98 DDK's own `wdm.h`.
 
 `tests/ddk/hello.c` is a small driver that makes `\Device\ClangHello` and
-answers an IOCTL with a 64-bit computation; `tests/ddk/client.c` talks to
-it. Wine runs drivers as services, so
+answers an IOCTL with a 64-bit computation and whether its `__except`
+caught a division by zero (with a `__finally` inside);
+`tests/ddk/client.c` talks to it. Wine runs drivers as services, so
 
 ```sh
 CFGDIR=~/clang-dos/bin sh tests/ddk/run-tests.sh
@@ -831,7 +848,14 @@ folder instead), and every kit found there is imported. Each one becomes
   `i386`, `STD_CALL`, `CONDITION_HANDLING`, `_NT1X_`, `WINNT`,
   `_WIN32_WINNT` and `WINVER` for the triple's version, ...) and pass
   `-mrtd`, since the DDKs built drivers with `cl /Gz` and declare dispatch
-  routines and the like without a calling convention. The linker makes a
+  routines and the like without a calling convention. They pass
+  `-fasync-exceptions` for `__try`, as `cl`'s is asynchronous. The NT
+  3.1 DDK's `libcnt.lib` has only `cl` 8.0's `_except_handler2`, so
+  `ms-nt31-ddk.cfg` links the package's `libntseh.a` for clang's
+  `_except_handler3`. The 386 kits (NT 3.1, NT 4.0, 98 WDM, the VxD
+  ones) pass `-fno-ms-volatile`: with `cl`'s volatile semantics, clang
+  makes volatile accesses atomic ones, which for a 386 are calls to
+  `__sync_lock_test_and_set_4`, a function no kit has. The linker makes a
   driver image: `-driver`, native subsystem of the triple's version, entry
   point `DriverEntry`, base `0x10000`, checksum, the `PAGE` and `INIT`
   sections of `alloc_text`, with `INIT` discardable. A few mistakes in the

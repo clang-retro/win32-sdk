@@ -27,7 +27,7 @@ command -v "$WINE" >/dev/null 2>&1 || WINE=
 export WINEDEBUG=${WINEDEBUG:--all}
 WINEPREFIX32=${WINEPREFIX32:-$out/wine32}
 WINEPREFIX64=${WINEPREFIX64:-${WINEPREFIX:-$HOME/.wine}}
-want="hello from clang 428571431 1"
+want="hello from clang 428571431 1 seh 1"
 pass=0 fail=0 skip=0
 bad() { fail=$((fail + 1)); echo "FAIL $1"; sed 's/^/    /' "$2" | head -20; }
 

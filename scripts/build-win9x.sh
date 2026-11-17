@@ -86,5 +86,15 @@ cp "$builtins" "$SYSROOT/lib/libclang_rt.builtins-i386.a"
 : > "$WORK/empty.c"
 $CC -c "$WORK/empty.c" -o "$SYSROOT/lib/crtbegin.o"
 $CC -c "$WORK/empty.c" -o "$SYSROOT/lib/crtend.o"
+# libntseh.a: _except_handler3, for the __try blocks of the 32-bit
+# *-ddk.cfg drivers (except3.S, next to this script in a package and in
+# ../kernel in win32-sdk; a copy of the script on its own skips it).
+seh=$(dirname "$0")/except3.S
+[ -f "$seh" ] || seh=$(dirname "$0")/../kernel/except3.S
+if [ -f "$seh" ]; then
+  $CC -c "$seh" -o "$WORK/except3.o"
+  rm -f "$SYSROOT/lib/libntseh.a"
+  "$BIN/llvm-ar" rc "$SYSROOT/lib/libntseh.a" "$WORK/except3.o"
+fi
 
 echo "Windows 9x sysroot installed in $SYSROOT"
