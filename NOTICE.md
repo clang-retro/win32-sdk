@@ -12,6 +12,7 @@ from source.
 | C runtime start-up and import libraries | `lib/crt*.o`, `lib/lib*.a` | mingw-w64 | ZPL 2.1 and public domain (`mingw-w64/COPYING.MinGW-w64-runtime.txt`) |
 | IDL and ACF files | `include/*.idl`, `include/*.acf` | mingw-w64 | Mostly public domain (`mingw-w64/DISCLAIMER.PD`); some carry the LGPL 2.1 notices of Wine, which they came from |
 | OLE Automation type libraries | `lib/stdole2.tlb`, `lib/stdole32.tlb` | clang-dos/win32-sdk (`idl/stdole2.idl`) | AGPL-3.0-only; a program's type library only refers to them by GUID, and Windows supplies its own copy at run time |
+| COM support library | `lib/libcomsupp.a`, `lib/libcomsuppw.a` | clang-dos/win32-sdk (`comsupp/comsupp.cpp`) | AGPL-3.0-only (`win32-sdk-LICENSE`) |
 | Compiler builtins, libc++, libc++abi, libunwind | `lib/libgcc.a`, `lib/libc++*.a`, `lib/libunwind.a`, `include/c++/` | LLVM | Apache 2.0 with LLVM exception (`LLVM-LICENSE.TXT`) |
 | libunicows (95/98/ME sysroot) | `lib/libunicows.a` | libunicows 1.1.2 | MIT (`libunicows-LICENSE.txt`) |
 | C library (`win32-picolibc` sysroot) | `lib/libc.a`, `lib/libm.a`, its C headers in `include/` | picolibc | BSD-style licences (`picolibc-COPYING`) |

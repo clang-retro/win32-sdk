@@ -143,6 +143,46 @@ did. Options widl has no use for, such as `/nologo`, `/robust` and
 (and `-DPROXY_DELEGATION` for proxies of derived interfaces) and linked
 with `-lrpcrt4 -loleaut32 -luuid`.
 
+### #import and the COM support library
+
+`tlbimport` (`tools/tlbimport.cpp`, in the toolchain package next to
+`midl`) is the type library half of Visual C++'s `#import`: it reads a
+type library, either a `.tlb` file or the `TYPELIB` resource of a `.dll`,
+`.ocx`, `.exe` or `.olb`, and writes the `.tlh` and `.tli` headers that
+`#import` includes, with the same namespace, smart pointers (`IFooPtr`),
+`__declspec(property)` members, error-checking wrapper methods and
+`raw_` methods. `#import`'s attributes are passed as they are written in
+the directive:
+
+```sh
+tlbimport -L "$SYSROOT/lib" 'rename("FreeSpace","FreeSpaceX")' scrrun.dll
+tlbimport no_namespace named_guids calc.tlb
+```
+
+`-o DIR` picks where the headers go and `-L DIR` where the type libraries
+it imports (`stdole2.tlb`, ...) are found. Type libraries in the MSFT
+format, what MIDL, widl and `ICreateTypeLib2` write, are read; the older
+SLTG format is not.
+
+The headers compile with or without `-fms-extensions`. Without it, the
+GUIDs behind `__uuidof` come from mingw-w64's `__CRT_UUID_DECL`, and the
+`__declspec(property)` members are left out, so properties are reached
+through their `GetX` and `PutX` wrappers. The names of Windows API macros
+clash as they do with Visual C++, and the same `rename` attributes fix
+them (`GetFreeSpace` in `scrrun.dll`, `RGB` in `vbscript.dll`).
+
+The wrappers of dispinterfaces call `_com_dispatch_method` and the other
+functions `comdef.h` declares, and failed calls throw `_com_error`
+through `_com_issue_errorex`. Every Windows sysroot but `win32-picolibc`
+(where `comdef.h` needs C library functions picolibc lacks) has them in
+`libcomsupp.a` (also as `libcomsuppw.a`), built from
+`comsupp/comsupp.cpp`. `comdef.h` links it, with `oleaut32`, `ole32` and
+`uuid`, as Visual C++'s links `comsuppw.lib`: clang honours that with
+`-fms-extensions`; otherwise link with `-lcomsupp -loleaut32 -lole32
+-luuid`. The sysroots' `comdefsp.h` also defines the smart pointers of
+the system interfaces (`IUnknownPtr`, `IDispatchPtr`, ...) for clang, not
+only for Visual C++.
+
 ### The C runtime DLL
 
 Programs import `msvcrt.dll`. Windows 98 and ME ship it; Windows 95 has it
