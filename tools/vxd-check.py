@@ -233,7 +233,83 @@ def check(path, want_kind):
                        "not locked code" % tobj)
         else:
             print("  control procedure at %d:%08x" % (tobj, ctl[0][3]))
+    check_ways_in(m, obj, off, ddb, bad)
+    check_version(m, bad)
     return bad
+
+
+def check_version(m, bad):
+    """The version resource, if the VxD has one: a 16-bit resource entry
+    (RT_VERSION) where the LE header's Windows resource fields point,
+    holding a VS_VERSIONINFO."""
+    off, size = struct.unpack_from("<II", m.d, m.le + 0xB8)
+    if not off and not size:
+        return
+    res = m.d[off:off + size]
+    if len(res) != size or size < 12 + 92:
+        bad.append("the Windows resources run past the end of the file")
+        return
+    if res[:6] != b"\xff\x10\x00\xff\x01\x00":
+        bad.append("the Windows resource is not a version resource "
+                   "(RT_VERSION, 1)")
+        return
+    n, = struct.unpack_from("<I", res, 8)
+    cb, cv = struct.unpack_from("<HH", res, 12)
+    key = res[16:32]
+    sig, _, ms, ls = struct.unpack_from("<4I", res, 32)
+    if (n != cb or n > size - 12 or key != b"VS_VERSION_INFO\0" or cv != 52
+            or sig != 0xFEEF04BD):
+        bad.append("the version resource is not a 16-bit VS_VERSIONINFO")
+        return
+    print("  version resource: %d.%d.%d.%d" % (ms >> 16, ms & 0xFFFF,
+                                              ls >> 16, ls & 0xFFFF))
+
+
+def fixup_at(m, obj, off):
+    """The fixup (target object, offset) at offset OFF of object OBJ."""
+    pidx = m.objects[obj - 1][3]
+    page = pidx + off // m.pagesize
+    for f in m.fixups():
+        if f[0] == page and f[1] == off % m.pagesize:
+            return f[2], f[3]
+    return None
+
+
+def check_ways_in(m, obj, off, ddb, bad):
+    """The V86 and PM API procedures and the service table, where the DDB
+    has them: each must be locked code, and the table locked, its entries
+    pointing at locked code."""
+    devid, = struct.unpack_from("<H", ddb, 6)
+    for what, at in (("V86 API procedure", 0x1C), ("PM API procedure", 0x20)):
+        t = fixup_at(m, obj, off + at)
+        if t is None:
+            continue
+        kind = object_kind(m.objects[t[0] - 1][2])
+        print("  %s at %d:%08x" % (what, t[0], t[1]))
+        if kind != "locked code":
+            bad.append("the %s is in %s, not locked code" % (what, kind))
+        if devid == 0:
+            bad.append("a %s, but no device ID (programs find it by ID)"
+                       % what)
+    count, = struct.unpack_from("<I", ddb, 0x34)
+    t = fixup_at(m, obj, off + 0x30)
+    if t is None:
+        if count:
+            bad.append("DDB_Service_Table_Size %d, but no table" % count)
+        return
+    tobj, toff = t
+    if object_kind(m.objects[tobj - 1][2]) not in ("locked data",
+                                                    "locked code"):
+        bad.append("the service table is not locked")
+    if devid == 0:
+        bad.append("a service table, but no device ID to call it by")
+    print("  service table: %d services" % count)
+    for i in range(count):
+        e = fixup_at(m, tobj, toff + i * 4)
+        if e is None:
+            bad.append("service %d points nowhere" % i)
+        elif object_kind(m.objects[e[0] - 1][2]) != "locked code":
+            bad.append("service %d is not in locked code" % i)
 
 
 def main():

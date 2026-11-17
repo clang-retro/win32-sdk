@@ -6,7 +6,8 @@
 vxdsvc.h defines VXDSVC_<name> for each service, the dword that follows
 int 20h (the device ID and the service number), between #if VXD_WINVER
 >= <version> and #endif, and declares the services called like C
-functions. DIR gets one assembly file for each of those: a stub that
+functions: with their types where vxd-prototypes.txt has them
+(gen-vxd-protos.py), else with no parameter list. DIR gets one assembly file for each of those: a stub that
 jumps to the service (int 20h with the VxDJmp bit, which the VMM patches
 into a jump), so that a call to the stub is a call to the service, with
 the caller's arguments on the stack. scripts/build-vxd.sh assembles the
@@ -18,8 +19,9 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Services vxd.h declares with their types; the others called like C
-# functions are declared here with no parameter list (C17 and earlier).
+# Services vxd.h declares with its own types; the others called like C
+# functions are declared here, with the types of vxd-prototypes.txt or
+# with no parameter list (C17 and earlier).
 TYPED = {
     "_HeapAllocate", "_HeapFree", "_HeapReAllocate", "_HeapGetSize",
     "_PageAllocate", "_PageFree", "_LinPageLock", "_LinPageUnLock",
@@ -27,7 +29,7 @@ TYPED = {
     "_RegDeleteKey", "_RegQueryValueEx", "_RegSetValueEx",
     "_RegDeleteValue", "_RegFlushKey", "_VWIN32_QueueUserApc",
     "_VWIN32_SetWin32Event", "_VWIN32_ResetWin32Event",
-    "_VWIN32_CloseVxDHandle",
+    "_VWIN32_CloseVxDHandle", "_Register_Win32_Services",
 }
 
 
@@ -53,6 +55,22 @@ def read(path):
     return services
 
 
+def read_prototypes(path):
+    """{name: (return type, [parameter types])} from vxd-prototypes.txt."""
+    out = {}
+    if not os.path.exists(path):
+        return out
+    with open(path) as f:
+        for line in f:
+            if not line.strip() or line.startswith("#"):
+                continue
+            name, ret, params = line.split()
+            c = lambda t: "void *" if t == "void*" else t
+            out[name] = (c(ret), [] if params == "void" else
+                         [c(t) for t in params.split(",")])
+    return out
+
+
 def symbol(name, conv):
     """The stub's symbol: the C name as clang decorates it."""
     if conv == "c":
@@ -67,10 +85,13 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--services",
                     default=os.path.join(HERE, "vxd-services.txt"))
+    ap.add_argument("--prototypes",
+                    default=os.path.join(HERE, "vxd-prototypes.txt"))
     ap.add_argument("--header", required=True)
     ap.add_argument("--stubs", required=True)
     a = ap.parse_args()
     services = read(a.services)
+    protos = read_prototypes(a.prototypes)
     os.makedirs(a.stubs, exist_ok=True)
     out = ["/* vxdsvc.h: the services of the VMM and the VxDs of Windows 3.1,",
            "   95, 98 and ME. Made by gen-vxd-wraps.py from vxd-services.txt;",
@@ -89,7 +110,11 @@ def main():
         for dev, did, num, name, conv, _ in by_version[since]:
             if conv == "reg" or name in TYPED:
                 continue
-            if conv == "c":
+            if conv == "c" and name in protos:
+                ret, params = protos[name]
+                decls.append("%s %s(%s);" % (ret, name,
+                                             ", ".join(params) or "void"))
+            elif conv == "c":
                 decls.append("DWORD %s();" % name)
             else:
                 kind, n = conv.split("/")

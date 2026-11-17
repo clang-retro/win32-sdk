@@ -9,7 +9,8 @@
 #   sysroots/<name>/                the five mingw-w64 sysroots and the
 #                                   picolibc one, each with share/licenses/
 #   share/clang-dos/                check-imports.py, msvcrt-versions.txt,
-#                                   kernel-versions.txt, vxd-link.py,
+#                                   kernel-versions.txt,
+#                                   wdm9x-exports.txt, vxd-link.py,
 #                                   vxd-check.py, build-modern-sysroot.sh,
 #                                   README
 #   share/clang-dos/ddk/            the test driver and its client
@@ -40,7 +41,8 @@ else
   rm -f "$d/bin/win32-picolibc.cfg" "$d/bin/nt31-picolibc.cfg"
 fi
 cp "$here/tools/check-imports.py" "$here/tools/msvcrt-versions.txt" \
-  "$here/tools/kernel-versions.txt" "$here/scripts/build-modern-sysroot.sh" \
+  "$here/tools/kernel-versions.txt" "$here/tools/wdm9x-exports.txt" \
+  "$here/scripts/build-modern-sysroot.sh" \
   "$here/scripts/fix-ddk-headers.sh" "$here/tools/vxd-link.py" \
   "$here/tools/vxd-check.py" "$d/share/clang-dos/"
 cp -R "$here/tests/ddk" "$d/share/clang-dos/ddk"

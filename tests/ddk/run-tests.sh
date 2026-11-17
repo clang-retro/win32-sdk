@@ -2,7 +2,8 @@
 # Build the test driver (hello.c) with every *-ddk.cfg, check its PE header
 # and, for the 32-bit ones, its imports (check-imports.py --nt), and load it
 # in Wine, which runs drivers as services: client.c opens its device and
-# sends it an IOCTL.
+# sends it an IOCTL. The NT 4.0 build is checked as a WDM driver for
+# Windows 98 and ME too (check-imports.py --wdm).
 #
 #   CFGDIR   folder with clang and the config files (a toolchain package's
 #            bin/), with the win32-sdk sysroots next to it in ../sysroots
@@ -99,5 +100,23 @@ for cfg in ${CONFIGS:-$(cd "$CFGDIR" && ls *-ddk.cfg | grep -v "^ms-")}; do
     fi
   done
 done
+# WDM drivers for Windows 98 and ME: hello.c, built for NT 4.0's subsystem
+# version, uses only what their WDM has; notwdm.c does not.
+if [ -f "$CFGDIR/nt4-ddk.cfg" ] && [ -f nt4-ddk-O2.sys ]; then
+  for v in 98 me; do
+    if ${PYTHON:-python3} "$check" --wdm $v nt4-ddk-O2.sys >wdm-$v.chk 2>&1
+    then pass=$((pass + 1)); else bad "wdm $v" wdm-$v.chk; fi
+  done
+  if ! "$CFGDIR/clang" --config="$CFGDIR/nt4-ddk.cfg" -O2 "$here/notwdm.c" \
+       -o notwdm.sys >notwdm.log 2>&1; then
+    bad "notwdm build" notwdm.log
+  elif ${PYTHON:-python3} "$check" --wdm 98 notwdm.sys >notwdm.chk 2>&1 ||
+       ! grep -q "PsGetVersion is not one of the WDM functions" notwdm.chk
+  then
+    bad "notwdm check-imports" notwdm.chk
+  else
+    pass=$((pass + 1))
+  fi
+fi
 echo "ddk tests: $pass passed, $fail failed, $skip not run in Wine"
 [ $fail = 0 ]

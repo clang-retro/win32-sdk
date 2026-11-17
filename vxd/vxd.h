@@ -131,6 +131,19 @@ struct vxd_regs {
   DWORD eax, ebx, ecx, edx, esi, edi, ebp;
 };
 
+/* The registers of a virtual machine's program as the VMM saved them
+   (EBP points at them in V86 and PM API procedures, and in most
+   callbacks): changing them changes what the program gets back. In V86
+   mode the segment registers are real-mode segments. */
+struct vxd_client_regs {
+  DWORD edi, esi, ebp, reserved0, ebx, edx, ecx, eax;
+  DWORD error, eip;
+  WORD cs, pad1;
+  DWORD eflags, esp;
+  WORD ss, pad2, es, pad3, ds, pad4, fs, pad5, gs, pad6;
+};
+#define VXD_CLIENT_CARRY 0x0001
+
 #ifndef _VMM_
 /* What W32_DEVICEIOCONTROL passes in ESI: a Win32 program's
    DeviceIoControl call. Its buffers are the program's, at their linear
@@ -163,12 +176,29 @@ struct DIOCParams {
    8 characters, the name Windows knows it by). The control procedure
    calls int vxd_control(DWORD msg, struct vxd_regs *r). */
 #define VXD_DEVICE(NAME, ID, ORDER, MAJOR, MINOR)                            \
+  VXD_DEVICE_EX(NAME, ID, ORDER, MAJOR, MINOR, 0, 0, 0)
+
+/* VXD_DEVICE with the ways in that other code has besides the control
+   procedure, each 0 if the VxD has none:
+     V86, PM  the procedures (VXD_CALLBACKs) that DOS programs and
+              protected-mode ones (Windows 3.x programs, DPMI clients)
+              call at the address int 2Fh AX=1684h BX=ID gives them;
+              EBX is the VM, EBP its client registers (struct
+              vxd_client_regs), which the procedure changes to return
+              values. They need a device ID of the VxD's own, not
+              UNDEFINED_DEVICE_ID.
+     SERVICES the VxD's services, which other VxDs call with int 20h and
+              ID << 16 | number (VXD_SERVICES below).
+   Win32 services are registered when the VxD starts instead
+   (VXD_WIN32_SERVICES below). */
+#define VXD_DEVICE_EX(NAME, ID, ORDER, MAJOR, MINOR, V86, PM, SERVICES)      \
   void NAME##_Control(void);                                                 \
   int vxd_control(DWORD msg, struct vxd_regs *r);                            \
   struct vxd_ddb NAME##_DDB = {                                              \
       0, VXD_DDK_VERSION, (ID), (MAJOR), (MINOR), 0,                         \
       {VXD_PAD8_(#NAME)}, (ORDER), (DWORD)NAME##_Control,                    \
-      0, 0, 0, 0, 0, 0, 0, 0,                                                \
+      (DWORD)(V86), (DWORD)(PM), 0, 0, 0, (DWORD)(SERVICES),                 \
+      VXD_COUNT_(SERVICES), 0,                                               \
       0x50726576UL /* "Prev" */, sizeof(struct vxd_ddb),                     \
       0x52737631UL, 0x52737632UL, 0x52737633UL /* "Rsv1" ... */};           \
   __asm__(".text\n.globl _" VXD_STR(NAME) "_Control\n"                     \
@@ -181,6 +211,67 @@ struct DIOCParams {
           "  popl %eax\n  popl %ebx\n  popl %ecx\n  popl %edx\n"            \
           "  popl %esi\n  popl %edi\n  popl %ebp\n"                         \
           "  jnz 1f\n  clc\n  ret\n1:\n  stc\n  ret\n")
+
+/* The number of entries in a service table, 0 for none. */
+#define VXD_COUNT_(T)                                                        \
+  _Generic((T), int: 0, default: sizeof(T) / sizeof(DWORD))
+
+/* A VxD's service table: VXD_SERVICES(MYVXD, MYVXD_Get_Version,
+   MYVXD_Read, ...) defines MYVXD_Services, for VXD_DEVICE_EX. The
+   services are numbered from 0 in that order, and by custom service 0
+   returns the VxD's version in EAX with the carry flag clear. A service
+   that takes and returns registers is a VXD_CALLBACK; one called like a
+   C function (by custom its name starts with an underscore) is a C
+   function, cdecl, that returns its value in EAX. The table is locked,
+   and so must the services be that other VxDs may call at interrupt
+   time. */
+#define VXD_SERVICES(NAME, ...)                                              \
+  const void *const NAME##_Services[] = {__VA_ARGS__}
+
+/* A VxD's Win32 services (Windows 95 and later):
+   VXD_WIN32_SERVICES(MYVXD, VXD_WIN32(Name, 2), ...) defines
+   MYVXD_Win32_Services, each service and how many dword parameters it
+   takes, and VXD_REGISTER_WIN32_SERVICES(MYVXD), called when the VxD
+   starts (Device_Init, or Sys_Dynamic_Device_Init for a dynamic VxD),
+   hands them to the VMM. They are numbered from 0, and a Win32 program
+   calls service N with KERNEL32's VxDCall (its export 1, VxDCall0, and
+   the ones after it: VxDCall2 is export 3) and ID << 16 | N; the VxD
+   needs a device ID of its own.
+   VWIN32 calls a service stdcall with two dwords before the program's
+   parameters, as the DDK's Declare_Win32_Service has it: the caller's
+   registers (EBP, a struct vxd_client_regs, whose eax is what VxDCall
+   returns) and the VM (EBX), which Windows 98 was seen to pass.
+   VXD_WIN32_SERVICE(Name, Fn, N) makes the procedure Name for the table
+   from a C function
+     DWORD Fn(struct vxd_client_regs *c, DWORD vm, DWORD a1, ... aN)
+   whose return value VxDCall returns. */
+#define VXD_WIN32_SERVICE(NAME, FN, N)                                       \
+  void NAME(void);                                                           \
+  __asm__(".text\n.globl _" VXD_STR(NAME) "\n"                               \
+          "_" VXD_STR(NAME) ":\n"                                            \
+          "  pushl %ebx\n  movl 8(%esp), %ebx\n"                             \
+          "  .rept " VXD_STR(N) " + 2\n"                                     \
+          "  pushl 8 + 4 * (" VXD_STR(N) " + 1)(%esp)\n"                     \
+          "  .endr\n  cld\n  call _" VXD_STR(FN) "\n"                        \
+          "  addl $4 * (" VXD_STR(N) " + 2), %esp\n"                         \
+          "  movl %eax, 28(%ebx)\n  popl %ebx\n"                             \
+          "  ret $4 * (" VXD_STR(N) " + 2)\n")
+struct vxd_win32_service {
+  const void *fn;
+  DWORD nparams;
+};
+#define VXD_WIN32(FN, NPARAMS) {(const void *)(FN), (NPARAMS)}
+#define VXD_WIN32_SERVICES(NAME, ...)                                        \
+  const struct vxd_win32_service NAME##_Win32_Services[] = {                 \
+      {(const void *)(sizeof((struct vxd_win32_service[]){__VA_ARGS__}) /     \
+                      sizeof(struct vxd_win32_service)),                     \
+       0},                                                                   \
+      __VA_ARGS__}
+#define VXD_REGISTER_WIN32_SERVICES(NAME)                                    \
+  _Register_Win32_Services(&NAME##_DDB, NAME##_Win32_Services)
+#ifndef _VMM_
+DWORD _Register_Win32_Services(void *ddb, const void *table);
+#endif
 
 /* The name, padded with spaces to 8 characters. */
 #define VXD_PAD8_(s)                                                         \
@@ -240,6 +331,15 @@ struct DIOCParams {
         : "ecx", "edx", "memory");                                           \
     vxd_c_;                                                                  \
   })
+
+/* Call another VxD's services: VXD_CALL_ID(&r, VXD_SERVICE(ID, N)) a
+   register one, like VxDCall; VXD_C_SERVICE(Name, ID, N) defines Name, a
+   stub that jumps to a service called like a C function, so that Name
+   can be declared and called as one (DWORD Name(DWORD a, DWORD b)). */
+#define VXD_CALL_ID(R, SERVICE) vxd_call_((R), (SERVICE))
+#define VXD_C_SERVICE(NAME, ID, N)                                           \
+  __asm__(".text\n.globl _" VXD_STR(NAME) "\n_" VXD_STR(NAME) ":\n"         \
+          "  int $0x20\n  .long " VXD_STR(((ID) << 16) | (N) | 0x8000) "\n")
 
 /* A procedure the VMM or a VxD calls with registers (a time-out, an
    event, an I/O trap, a hardware interrupt): VXD_CALLBACK(NAME, FN)
