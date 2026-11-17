@@ -557,11 +557,14 @@ python3 share/clang-dos/vxd-check.py --dynamic HELLO.VXD
   StdCall and FastCall ones) are functions: `libvxd.a` has a stub for
   each that jumps to the service. `<vxd.h>` declares the common ones with
   their types (the heap, pages, the registry, VWIN32's events and APCs).
-  `<vxdsvc.h>` declares 295 of the other 496 C services with their types,
+  `<vxdsvc.h>` declares 377 of the other 496 C services with their types,
   from `tools/vxd-prototypes.txt`. `tools/gen-vxd-protos.py` made that
-  list from the 95, 98 and ME DDKs' C headers, keeping only the types and
-  reducing each to `BYTE`, `WORD`, `DWORD` or `void *`. It declares the
-  rest with no parameter list (in C before C23), and the StdCall and
+  list from the 95, 98 and ME DDKs' C headers and, for the services no
+  header declares, the 98 and ME DDKs' help. It keeps only the types and
+  reduces each to `BYTE`, `WORD`, `DWORD` or `void *`. The other 119 are
+  in neither: Microsoft's internal and obsolete services (`_ACPI_Obsolete1`
+  and the like), or ones the help names without a syntax. It declares
+  those with no parameter list (in C before C23), and the StdCall and
   FastCall ones with their dword parameters.
 - `VXD_CALLBACK(name, fn)` makes a procedure for the VMM to call with
   registers (a time-out, an event, an I/O trap, an interrupt): it calls
