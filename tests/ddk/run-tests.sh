@@ -53,16 +53,18 @@ rundrv() {
 }
 
 if [ -n "$WINE" ]; then
-  # A new prefix: let the wineserver that made it exit first, as drivers
-  # started under it do not stay loaded.
-  if [ ! -d "$WINEPREFIX32" ]; then
-    WINEPREFIX=$WINEPREFIX32 WINEARCH=win32 "$WINE" wineboot -i >/dev/null 2>&1
-    WINEPREFIX=$WINEPREFIX32 "${WINESERVER:-wineserver}" -w >/dev/null 2>&1
-  fi
-  if [ ! -d "$WINEPREFIX64" ]; then
-    WINEPREFIX=$WINEPREFIX64 "$WINE" wineboot -i >/dev/null 2>&1
-    WINEPREFIX=$WINEPREFIX64 "${WINESERVER:-wineserver}" -w >/dev/null 2>&1
-  fi
+  # wineboot returns before Wine has finished setting up a new prefix, and
+  # a driver started meanwhile can run without its device being reachable
+  # (the client then gets ERROR_FILE_NOT_FOUND), so wait for the prefix's
+  # wineserver to exit.
+  wineserver=$(dirname "$(command -v "$WINE")")/wineserver
+  [ -x "$wineserver" ] || wineserver=wineserver
+  [ -d "$WINEPREFIX32" ] || { WINEPREFIX=$WINEPREFIX32 WINEARCH=win32 \
+    "$WINE" wineboot -i >/dev/null 2>&1
+    WINEPREFIX=$WINEPREFIX32 "$wineserver" -w; }
+  [ -d "$WINEPREFIX64" ] || { WINEPREFIX=$WINEPREFIX64 \
+    "$WINE" wineboot -i >/dev/null 2>&1
+    WINEPREFIX=$WINEPREFIX64 "$wineserver" -w; }
   "$CFGDIR/clang" --config="$CFGDIR/winxp.cfg" -O2 "$here/client.c" \
     -o client32.exe >client32.log 2>&1 || bad client32 client32.log
   "$CFGDIR/clang" --config="$CFGDIR/win7-x64.cfg" -O2 "$here/client.c" \
