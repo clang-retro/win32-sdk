@@ -6,7 +6,8 @@ DDKs: the parameter types of the services called like C functions.
         > vxd-prototypes.txt
 
     7z x -ohelp "4.90 DDK (unpacked)/help/win98ddk.chm"  (and the rest)
-    gen-vxd-protos.py --docs help "4.0 W95 DDK/ddk/INC32" \\
+    gen-vxd-protos.py --docs help --docs "4.0 W95 DDK/ddk/DOCS" \\
+        "4.0 W95 DDK/ddk/INC32" \\
         "4.10 DDK (unpacked)/inc/win98" \\
         "4.90 DDK (unpacked)/inc/win_me" > tools/vxd-prototypes.txt
 
@@ -24,9 +25,12 @@ PDEVNODE, a function pointer...) followed through their typedefs. A type
 no header defines is a pointer if its name says so (PNSOBJ, a ...HANDLER)
 and a dword otherwise. A service whose parameters grew between DDKs gets
 the ones every version has and "...". The services no header declares
-come from the DDKs' help (--docs, the .chm files unpacked): a C
-prototype, or the assembler syntax (VMMCall _Name, <a, b>), whose
-parameters are dwords and pointers (OFFSET32). A service whose types
+come from the DDKs' help (--docs: the .chm files unpacked, and the 95
+DDK's Word documents, DOCS/KERNEL/KERNEL.DOC and the rest): a C
+prototype, or the assembler syntax, VMMCall _Name, <a, b> or the pushes
+before a VMMcall _Name, whose parameters are dwords and pointers
+(OFFSET32); a service whose example sets registers instead is left out,
+and one that says "No return value" returns void. A service whose types
 can't be reduced (a structure passed by value, a 64-bit or
 floating-point one) or that neither has is left out, so gen-vxd-wraps.py
 declares it as before, with no parameter list. Only the types are taken,
@@ -199,9 +203,16 @@ def signature(ret, params, typedefs):
 
 
 def read_doc(path, names, docs):
-    with open(path, encoding="latin-1") as f:
-        t = f.read()
-    t = html.unescape(re.sub(r"<[^>]*>", "", t)).replace("\xa0", " ")
+    with open(path, "rb") as f:
+        raw = f.read()
+    if path.lower().endswith((".htm", ".html")):
+        t = raw.decode("latin-1")
+        t = html.unescape(re.sub(r"<[^>]*>", "", t)).replace("\xa0", " ")
+    else:
+        # A Word document (the 95 DDK's KERNEL.DOC): its text runs.
+        t = "\n".join(m.decode("latin-1") for m in
+                      re.findall(rb"[\t\r\x20-\x7e]{3,}", raw))
+        t = t.replace("\r", "\n")
     t = re.sub(r"\\\s*\n", " ", t)
     for m in re.finditer(r"^[ \t]*((?:[A-Za-z_]\w*[ \t*]+)+?)\b(_\w+)\s*"
                          r"\(([^()]*)\)\s*;", t, re.M):
@@ -229,6 +240,30 @@ def read_doc(path, names, docs):
         docs[m.group(1)] = ("DWORD", ", ".join(
             "PVOID" if "OFFSET" in x.upper() else "DWORD" for x in args)
             or "VOID")
+    # VMMcall _Name with nothing after it: the parameters are the pushes
+    # before it (the last one first), or none; a service that takes
+    # registers (mov eax, ... before it) is left out. "No return value"
+    # in its description: void.
+    for m in re.finditer(r"\b(?:VMMCall|VMMcall|VxDCall|VxDcall)\s+(_\w+)"
+                         r"[ \t]*$", t, re.M):
+        if m.group(1) not in names or m.group(1) in docs:
+            continue
+        before = t[:m.start()].split("\n")
+        setup = []
+        for line in reversed(before[-12:]):
+            if re.match(r"\s*include\b", line, re.I):
+                break
+            setup.append(line.strip())
+        else:
+            continue
+        if any(re.match(r"(mov|lea|xor|movzx)\b", x, re.I) for x in setup):
+            continue
+        pushes = [x for x in setup if re.match(r"push\b", x, re.I)]
+        after = t[m.end():m.end() + 600]
+        docs[m.group(1)] = (
+            "VOID" if "No return value" in after else "DWORD",
+            ", ".join("PVOID" if "OFFSET" in x.upper() else "DWORD"
+                      for x in pushes) or "VOID")
 
 
 def main():
@@ -283,7 +318,7 @@ def main():
     for d in a.docs:
         for root, _, files in os.walk(d):
             for f in files:
-                if f.lower().endswith((".htm", ".html")):
+                if f.lower().endswith((".htm", ".html", ".doc")):
                     read_doc(os.path.join(root, f), names, docs)
     print("# The parameter types of the VxD services called like C functions:")
     print("# name, return type, parameter types. Made by gen-vxd-protos.py.")

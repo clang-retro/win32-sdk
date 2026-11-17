@@ -177,6 +177,7 @@ _Debug_Printf_Service void void*,...
 _DestroyMutex DWORD void*
 _EnterMutex void void*,DWORD
 _EnumReclaimableItem DWORD DWORD,void*,DWORD
+_ExecVxDIntMustComplete DWORD DWORD
 _FlushCaches DWORD DWORD
 _FreeThreadDataSlot void DWORD
 _Free_GDT_Selector DWORD DWORD,DWORD
@@ -187,12 +188,15 @@ _GARTFree void void*
 _GARTMemAttributes void void*,void*
 _GARTReserve void* void*,DWORD,DWORD,void*,DWORD
 _GARTUnCommit void void*,DWORD,DWORD
+_GetAppFlatDSAlias DWORD void
 _GetCurrentContext void* void
 _GetDemandPageInfo DWORD void*,DWORD
 _GetDescriptor DWORD DWORD,DWORD,DWORD
+_GetFirstV86Page DWORD void
 _GetFreePageCount DWORD DWORD
 _GetInstanceInfo DWORD DWORD,DWORD
 _GetLastUpdatedThreadExecTime DWORD DWORD
+_GetLastV86Page DWORD void
 _GetMutexOwner void* void*
 _GetNulPageHandle void* void
 _GetRegistryKey DWORD DWORD,void*,DWORD,void*
@@ -275,6 +279,8 @@ _RegRemapPreDefKey DWORD DWORD,DWORD
 _RegSetValue DWORD DWORD,void*,DWORD,void*,DWORD
 _RegSetValueEx DWORD DWORD,void*,DWORD,DWORD,void*,DWORD
 _RegisterGARTHandler DWORD void*
+_Register_Win32_Services void void*,void*
+_ResumeExecMustComplete void void
 _SHELL_BroadcastSystemMessage DWORD DWORD,void*,DWORD,DWORD,DWORD
 _SHELL_CallAtAppyTime DWORD void*,DWORD,DWORD,...
 _SHELL_CallDll DWORD void*,void*,DWORD,void*
