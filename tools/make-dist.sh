@@ -11,6 +11,7 @@
 #   share/clang-dos/                check-imports.py, msvcrt-versions.txt,
 #                                   kernel-versions.txt,
 #                                   wdm9x-exports.txt, vxd-link.py,
+#                                   drvsign.py,
 #                                   vxd-check.py, build-modern-sysroot.sh
 #                                   (and except3.S, its libntseh.a),
 #                                   README
@@ -45,7 +46,7 @@ cp "$here/tools/check-imports.py" "$here/tools/msvcrt-versions.txt" \
   "$here/tools/kernel-versions.txt" "$here/tools/wdm9x-exports.txt" \
   "$here/scripts/build-modern-sysroot.sh" \
   "$here/scripts/fix-ddk-headers.sh" "$here/kernel/except3.S" \
-  "$here/tools/vxd-link.py" \
+  "$here/tools/vxd-link.py" "$here/tools/drvsign.py" \
   "$here/tools/vxd-check.py" "$d/share/clang-dos/"
 cp -R "$here/tests/ddk" "$d/share/clang-dos/ddk"
 cp -R "$here/vxd" "$d/share/clang-dos/vxd"

@@ -604,6 +604,49 @@ check), loads it in Wine (32-bit drivers in a 32-bit prefix,
 64-bit ones in a 64-bit one) and runs the client. Wine's kernel is not
 Windows', so a real Windows is still the final test.
 
+### Signing drivers
+
+64-bit Vista and later load only signed drivers. `tools/drvsign.py`
+(`share/clang-dos/drvsign.py` in the package; Python only, no signtool,
+makecert, makecat or OpenSSL) signs them for test-signing:
+
+```sh
+python3 drvsign.py newcert test.pem          # once: test.pem and test.cer
+python3 drvsign.py sign --cert test.pem mydriver.sys
+python3 drvsign.py catalog --cert test.pem -o mydriver.cat \
+    mydriver.inf mydriver.sys
+python3 drvsign.py verify --cert test.pem mydriver.sys mydriver.cat
+```
+
+* `newcert` makes an RSA key and a self-signed code-signing certificate
+  (`test.pem`, which stays private, and `test.cer`, the certificate alone).
+* `sign` embeds an Authenticode signature (PKCS #7, the hash of the whole
+  image but its checksum and certificate table) and fixes the checksum;
+  signing again replaces the signature.
+* `catalog` makes the signed catalog an INF's `CatalogFile` names, with the
+  Authenticode hash of each PE file and the plain hash of the rest.
+* `verify` checks the hashes and the signatures.
+
+Windows loads such drivers in test mode: `bcdedit /set testsigning on`
+(with Secure Boot off) and a restart. To install a package without the
+unsigned-driver prompt, add the certificate to the Trusted Root and
+Trusted Publishers stores (`certutil -addstore root test.cer`,
+`certutil -addstore trustedpublisher test.cer`). Windows Vista, 7 and 8
+without updates check only SHA-1: give `--hash sha1` to `newcert` and
+`sign` for them (catalogs are SHA-1 unless `--hash sha256`). Release
+signing needs a certificate from a certificate authority and, for
+Windows 10 and later, Microsoft's attestation signing, which this does
+not do. 32-bit Windows and NT 4.0, 2000 and XP do not check drivers'
+signatures, but XP asks before installing a package without a signed
+catalog.
+
+`tests/ddk/clanghello.inf` installs the test driver as a demand-start
+service (Wine installs, runs and removes it from the INF). `osslsigncode verify` accepts these signatures and catalogs, and
+Wine's `WinVerifyTrust` accepts the signatures and rejects ones whose
+file or signature was changed. The test driver itself is signed in the
+tests, and still loads in Wine; real Windows in test mode is still to be
+tried.
+
 ### VxDs for Windows 3.1, 95, 98 and ME
 
 A VxD is a 32-bit virtual device driver in the LE format, run by the VMM

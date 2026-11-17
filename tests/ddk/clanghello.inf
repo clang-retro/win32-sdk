@@ -1,0 +1,50 @@
+; Installs hello.c's driver as clanghello.sys, a demand-start kernel
+; service (not a Plug and Play driver): right-click Install, or
+;   rundll32 setupapi.dll,InstallHinfSection DefaultInstall 132 clanghello.inf
+; then "sc start ClangHello". clanghello.cat, made by
+;   tools/drvsign.py catalog --cert CERT.pem -o clanghello.cat \
+;       clanghello.inf clanghello.sys
+; signs the package, and "drvsign.py sign" the driver itself, which 64-bit
+; Windows checks (in test mode: bcdedit /set testsigning on).
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Provider    = %Provider%
+DriverVer   = 11/17/2026,1.0.0.0
+CatalogFile = clanghello.cat
+
+[DestinationDirs]
+DefaultDestDir = 12             ; system32\drivers
+
+[SourceDisksNames]
+1 = %Disk%
+
+[SourceDisksFiles]
+clanghello.sys = 1
+
+[DefaultInstall]
+CopyFiles = ClangHello.Files
+
+[DefaultInstall.Services]
+AddService = ClangHello,,ClangHello.Service
+
+[DefaultUninstall]
+DelFiles = ClangHello.Files
+
+[DefaultUninstall.Services]
+DelService = ClangHello,0x200   ; stop it first
+
+[ClangHello.Files]
+clanghello.sys
+
+[ClangHello.Service]
+DisplayName   = %Desc%
+ServiceType   = 1               ; kernel driver
+StartType     = 3               ; demand start
+ErrorControl  = 1               ; normal
+ServiceBinary = %12%\clanghello.sys
+
+[Strings]
+Provider = "clang-dos"
+Desc     = "clang-dos test driver"
+Disk     = "clang-dos test driver disk"

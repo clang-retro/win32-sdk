@@ -2,8 +2,10 @@
 # Build the test driver (hello.c) with every *-ddk.cfg, check its PE header
 # and, for the 32-bit ones, its imports (check-imports.py --nt), and load it
 # in Wine, which runs drivers as services: client.c opens its device and
-# sends it an IOCTL. The NT 4.0 build is checked as a WDM driver for
-# Windows 98 and ME too (check-imports.py --wdm).
+# sends it an IOCTL. Each driver is test-signed (drvsign.py) before it
+# is loaded, and a package of one with clanghello.inf gets a catalog. The
+# NT 4.0 build is checked as a WDM driver for Windows 98 and ME too
+# (check-imports.py --wdm).
 #
 #   CFGDIR   folder with clang and the config files (a toolchain package's
 #            bin/), with the win32-sdk sysroots next to it in ../sysroots
@@ -19,6 +21,8 @@
 here=$(cd "$(dirname "$0")" && pwd)
 check=$here/../../tools/check-imports.py
 [ -f "$check" ] || check=$here/../check-imports.py
+sign=$here/../../tools/drvsign.py
+[ -f "$sign" ] || sign=$here/../drvsign.py
 out=${WORK:-$PWD/build-ddk-tests}
 mkdir -p "$out"
 cd "$out" || exit 1
@@ -72,6 +76,12 @@ if [ -n "$WINE" ]; then
     -o client64.exe >client64.log 2>&1 || bad client64 client64.log
 fi
 
+# A test certificate: each driver is signed with it (SHA-1 for the 32-bit
+# ones and SHA-256 for the 64-bit ones) and then loaded, and the package
+# of the last one (clanghello.inf and its catalog) checked.
+${PYTHON:-python3} "$sign" newcert --bits 1024 test.pem >sign.log 2>&1 ||
+  bad "test certificate" sign.log
+
 for cfg in ${CONFIGS:-$(cd "$CFGDIR" && ls *-ddk.cfg | grep -v "^ms-")}; do
   name=${cfg%.cfg}
   for opt in O0 O2; do
@@ -90,6 +100,12 @@ for cfg in ${CONFIGS:-$(cd "$CFGDIR" && ls *-ddk.cfg | grep -v "^ms-")}; do
         bad "$t check-imports" "$t.chk"; continue
       fi
     fi
+    if [ $arch = 32 ]; then h=sha1; else h=sha256; fi
+    if ! { ${PYTHON:-python3} "$sign" sign --cert test.pem --hash $h \
+           "$t.sys" && ${PYTHON:-python3} "$sign" verify --cert test.pem \
+           "$t.sys"; } >"$t.sig" 2>&1; then
+      bad "$t sign" "$t.sig"; continue
+    fi
     if [ -z "$WINE" ]; then skip=$((skip + 1)); pass=$((pass + 1)); continue; fi
     if [ $arch = 32 ]; then prefix=$WINEPREFIX32; else prefix=$WINEPREFIX64; fi
     got=$(rundrv "$prefix" "$t.sys" client$arch.exe 2>"$t.err" | tr -d '\r')
@@ -100,6 +116,17 @@ for cfg in ${CONFIGS:-$(cd "$CFGDIR" && ls *-ddk.cfg | grep -v "^ms-")}; do
     fi
   done
 done
+# A driver package: the INF, the driver and a catalog of both.
+last=$(ls -t *-ddk-O2.sys 2>/dev/null | head -n 1)
+if [ -n "$last" ]; then
+  mkdir -p pkg
+  cp "$here/clanghello.inf" pkg/ && cp "$last" pkg/clanghello.sys
+  if { ${PYTHON:-python3} "$sign" catalog --cert test.pem \
+         -o pkg/clanghello.cat pkg/clanghello.inf pkg/clanghello.sys &&
+       ${PYTHON:-python3} "$sign" verify --cert test.pem pkg/clanghello.cat
+     } >pkg.log 2>&1
+  then pass=$((pass + 1)); else bad "catalog" pkg.log; fi
+fi
 # WDM drivers for Windows 98 and ME: hello.c, built for NT 4.0's subsystem
 # version, uses only what their WDM has; notwdm.c does not.
 if [ -f "$CFGDIR/nt4-ddk.cfg" ] && [ -f nt4-ddk-O2.sys ]; then
