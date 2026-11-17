@@ -5,7 +5,9 @@
 
 It checks that the file is an LE module for Windows 386 marked as a
 virtual device driver (dynamic or static for 95 and later, or as Windows
-3.x marked them), that its one export is NAME_DDB at ordinal 1, and that
+3.x marked them), that each object's flags make it a kind of object the
+loader knows, that its fixups are 32-bit ones, that its one export is
+NAME_DDB at ordinal 1, in a locked object, and that
 the DDB it points at has that NAME, the DDK version (4.00, or 3.10 for
 Windows 3.1) in it and in the LE header, its "Prev" and
 "Rsv1".."Rsv3" signatures and the right size, and a control procedure
@@ -21,6 +23,27 @@ VXD_31 = 0x8020  # module flags: a Windows 3.x VxD
 VXD_STATIC = 0x28000  # a Windows 95 virtual device driver
 VXD_DYNAMIC = 0x38000  # ... that can be loaded and unloaded
 KINDS = {VXD_31: "Windows 3.x", VXD_STATIC: "static", VXD_DYNAMIC: "dynamic"}
+# How the loader (VXDLDR in Windows 95 to ME) tells the kind of an object
+# from its flags: the first (mask, value) that flags & mask equals. An
+# object that matches none makes the file a bad device file (error 6).
+OBJECT_KINDS = [
+    (0xE754, 0x2044, "locked code"), (0x16714, 0x2014, "init code"),
+    (0xE774, 0x2060, "locked data"), (0xE734, 0x2030, "init data"),
+    (0xE754, 0x2004, "pageable code"), (0xE774, 0x2020, "pageable data"),
+    (0xE714, 0x2204, "pageable code"), (0xE734, 0x2220, "pageable data"),
+    (0xE754, 0x0044, "16-bit locked code"), (0xE754, 0x0054, "16-bit code"),
+    (0xE704, 0x0004, "real-mode init code"),
+    (0xE754, 0xA044, "locked code"), (0xE714, 0xA014, "init code"),
+    (0xE754, 0xA004, "pageable code"), (0xE754, 0x6044, "locked code"),
+    (0xE774, 0x6060, "locked data"),
+]
+
+
+def object_kind(flags):
+    for mask, value, kind in OBJECT_KINDS:
+        if flags & mask == value:
+            return kind
+    return None
 
 
 class LE:
@@ -103,8 +126,8 @@ class LE:
         return out
 
     def fixups(self):
-        """[(page, offset in page, target object, target offset)] for the
-        internal 32-bit offset fixups."""
+        """[(page, offset in page, target object, target offset, source
+        type)] for the internal fixups."""
         out = []
         base = self.le + self.fixrec
         for p in range(1, self.npages + 1):
@@ -131,7 +154,7 @@ class LE:
                 else:
                     tgt = struct.unpack_from("<H", self.d, o)[0]
                     o += 2
-                out.append((p, srcoff, obj, tgt))
+                out.append((p, srcoff, obj, tgt, src & 0xF))
         return out
 
 
@@ -148,6 +171,18 @@ def check(path, want_kind):
     elif want_kind is not None and kind != want_kind:
         bad.append("a %s VxD, not a %s one" % (KINDS[kind], KINDS[want_kind]))
     want_ver = 0x030A if kind == VXD_31 else 0x0400
+    for i, (vsize, base, fl, pidx, np) in enumerate(m.objects):
+        k = object_kind(fl)
+        print("  object %d: flags 0x%x, %s, 0x%x bytes"
+              % (i + 1, fl, k or "no kind", vsize))
+        if k is None:
+            bad.append("object %d's flags 0x%x are no kind of object the "
+                       "loader knows" % (i + 1, fl))
+    for f in m.fixups():
+        if f[4] not in (7, 8):
+            bad.append("fixup of source type %d (only 32-bit offsets and "
+                       "relative ones load)" % f[4])
+            break
     names, entries = m.names(), m.entries()
     exports = {o: n for o, n in names.items() if o}
     print("  module %s" % names.get(0, "?"))
@@ -181,6 +216,8 @@ def check(path, want_kind):
         bad.append("DDB_Size %d, not 80" % sigs[1])
     # The control procedure pointer (DDB + 0x18) needs a fixup to code.
     vsize, base, fl, pidx, np = m.objects[obj - 1]
+    if object_kind(fl) not in ("locked data", "locked code"):
+        bad.append("the DDB is in object %d, which is not locked" % obj)
     page = pidx + (off + 0x18) // m.pagesize
     poff = (off + 0x18) % m.pagesize
     ctl = [f for f in m.fixups() if f[0] == page and f[1] == poff]

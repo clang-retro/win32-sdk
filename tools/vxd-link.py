@@ -83,6 +83,12 @@ def main():
     # The DDB is the VxD's one export, ordinal 1, with the C name's
     # underscore.
     lines.append("export %s_DDB.1=_%s_DDB" % (name, name))
+    # The loader tells the kind of each object from its flags: code that
+    # is preloaded is locked code; data must be preloaded and shared to be
+    # locked data (preloaded only, VXDLDR refuses it as a bad device file),
+    # and the DDB has to be locked.
+    lines += ["segment type code preload nondiscardable",
+              "segment type data preload shared nondiscardable"]
     with tempfile.NamedTemporaryFile("w", suffix=".lnk", delete=False) as f:
         f.write("\n".join(lines) + "\n")
         directives = f.name
