@@ -532,14 +532,14 @@ python3 share/clang-dos/vxd-check.py --dynamic HELLO.VXD
   other fields to return values in registers.
 - The control messages (`SYS_DYNAMIC_DEVICE_INIT`, `W32_DEVICEIOCONTROL`,
   ...), `struct DIOCParams`, and `DIOC_OPEN` and `DIOC_CLOSEHANDLE`.
-- The services of the VMM and of 40 VxDs of Windows 3.1 to ME (1,382 of
+- The services of the VMM and of 40 VxDs of Windows 3.1 to ME (1,391 of
   them, in `<vxdsvc.h>`, made from `tools/vxd-services.txt`).
   `VXDSVC_name` is the dword that follows `int 20h` for each. A service
   is defined when `VXD_WINVER` is at least the Windows version that has
   it: 3.10 (`0x030A`) for `win31-vxd.cfg`, 4.00 by default, and
-  `-DVXD_WINVER=0x040A` for 98 or `0x045A` for ME. Services new since the
-  95 DDK count as ME's unless their table names 98, since no 98 DDK was
-  used.
+  `-DVXD_WINVER=0x040A` for 98 or `0x045A` for ME. Each service's version
+  is the first of the 3.1, 95, 98 and ME DDKs that has it (95 OSR2's, 4.03,
+  where the 95 DDK's table says so).
 - `VxDCall(name, &regs)` calls a register service: it loads EAX to EBP
   from a `struct vxd_regs`, calls the service, stores them back and
   returns 1 if the service set the carry flag. The services called like C
@@ -641,12 +641,15 @@ folder instead), and every kit found there is imported. Each one becomes
 | `ws03-ddk` | `5.2.3970.1830 DDK (unpacked)` | `i586-pc-windows5.2-msvc` | Server 2003 SP1 DDK, drivers |
 | `ws03-x64-ddk` | `5.2.3970.1830 DDK (unpacked)` | `x86_64-pc-windows5.2-msvc` | Server 2003 SP1 DDK, x64 drivers |
 | `w95-vxd` | `4.0 W95 DDK` | `i386-pc-windows4.0-msvc` | Windows 95 DDK, VxDs |
-| `w98-vxd` | `5.1.2600 DDK (unpacked)` | `i386-pc-windows4.10-msvc` | XP DDK's Windows ME headers, for Windows 98 VxDs |
-| `me-vxd` | `5.1.2600 DDK (unpacked)` | `i386-pc-windows4.90-msvc` | XP DDK, Windows ME VxDs |
+| `w98-vxd` | `4.10 DDK (unpacked)` | `i386-pc-windows4.10-msvc` | Windows 98 DDK, VxDs |
+| `me-vxd` | `4.90 DDK (unpacked)` | `i386-pc-windows4.90-msvc` | Windows ME DDK, VxDs |
 
 * The kits are used as Microsoft shipped them, so the 1996 SDK's
   compressed `.LI_` files must be expanded first (`expand -r`) and the
   DDKs' CABs unpacked into the tree their setup installs (`WINDDK\`).
+  For the 98 and ME DDKs, `tools/unpack-ms-ddk.py 98DDK.RAR "4.10 DDK
+  (unpacked)"` (or `WMEDDK.ZIP` and `"4.90 DDK (unpacked)"`) does that;
+  it needs `7z`.
   The Aug 1996 SDK and the June 1995 one have no i386 C runtime library,
   so they take the NT 3.1 SDK's, which also runs on 95 and NT 4.0.
 * The triples are MSVC ones, so programs use Microsoft's ABI and C
@@ -705,7 +708,7 @@ folder instead), and every kit found there is imported. Each one becomes
   supported yet.
 
 * The `-vxd` kits build VxDs the DDKs' way, with `vmm.h`, `vxdwraps.h`
-  and the other headers of `INC32` (`inc/win_me` in the XP DDK) and
+  and the other headers of `INC32` (`inc/win98`, `inc/win_me`) and
   `VXDWRAPS.CLB`: compile with `clang --config=ms-w95-vxd.cfg -c` and link
   with `vxd-link.py --kit ms-w95-vxd`, which links the kit's library
   before `libvxd.a`. The config does what the DDKs' makefiles did (`cl

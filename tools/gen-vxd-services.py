@@ -8,7 +8,8 @@ oldest version first:
 
     gen-vxd-services.py "3.10=3.1 DDK/ddk/WIN31/DDK/386/INCLUDE" \\
         "4.00=4.0 W95 DDK/ddk/INC32" \\
-        "4.90=WINDDK/inc/win_me" > tools/vxd-services.txt
+        "4.10=4.10 DDK (unpacked)/inc/win98" \\
+        "4.90=4.90 DDK (unpacked)/inc/win_me" > tools/vxd-services.txt
 
 A VxD's services are numbered in the order of its Begin_Service_Table
 block. This writes one line for each service a VxD can call:

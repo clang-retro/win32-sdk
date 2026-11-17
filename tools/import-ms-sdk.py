@@ -204,7 +204,8 @@ KITS = {
     # VxD kits: the Windows 9x DDKs' C headers (vmm.h, vxdwraps.h, ...) and
     # VXDWRAPS.CLB, for VxDs built with `clang --config=ms-KIT.cfg -c` and
     # linked with vxd-link.py --kit ms-KIT. "vxd" lists the service sets
-    # the headers declare (WIN41SERVICES: Windows 98's).
+    # the headers declare (WIN41SERVICES: Windows 98's). The 98 and ME DDKs
+    # come as cabinets: unpack-ms-ddk.py installs them as their setup does.
     "w95-vxd": {
         "name": "Windows 95 DDK, VxDs",
         "folder": "4.0 W95 DDK",
@@ -215,22 +216,21 @@ KITS = {
         "vxd": ["WIN40SERVICES"],
     },
     "w98-vxd": {
-        "name": "Windows 98 VxDs, from the Windows XP DDK's Windows ME "
-                "headers (2600)",
-        "folder": "5.1.2600 DDK (unpacked)",
+        "name": "Windows 98 DDK, VxDs",
+        "folder": "4.10 DDK (unpacked)",
         "triple": "i386-pc-windows4.10-msvc",
-        "msc": "12.0",
-        "include": ["WINDDK/inc/win_me"],
-        "lib": ["WINDDK/lib/win_me"],
+        "msc": "11.0",
+        "include": ["inc/win98"],
+        "lib": ["lib/i386/free"],
         "vxd": ["WIN40SERVICES", "WIN403SERVICES", "WIN41SERVICES"],
     },
     "me-vxd": {
-        "name": "Windows ME VxDs, from the Windows XP DDK (2600)",
-        "folder": "5.1.2600 DDK (unpacked)",
+        "name": "Windows ME DDK, VxDs",
+        "folder": "4.90 DDK (unpacked)",
         "triple": "i386-pc-windows4.90-msvc",
         "msc": "12.0",
-        "include": ["WINDDK/inc/win_me"],
-        "lib": ["WINDDK/lib/win_me"],
+        "include": ["inc/win_me"],
+        "lib": ["lib/win_me"],
         "vxd": ["WIN40SERVICES", "WIN403SERVICES", "WIN41SERVICES",
                 "WIN49SERVICES"],
     },
