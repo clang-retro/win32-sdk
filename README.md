@@ -173,7 +173,8 @@ them (`GetFreeSpace` in `scrrun.dll`, `RGB` in `vbscript.dll`).
 
 The wrappers of dispinterfaces call `_com_dispatch_method` and the other
 functions `comdef.h` declares, and failed calls throw `_com_error`
-through `_com_issue_errorex`. Every Windows sysroot has them in
+through `_com_issue_errorex`. Every Windows sysroot but `win32-picolibc`
+(where `comdef.h` needs C library functions picolibc lacks) has them in
 `libcomsupp.a` (also as `libcomsuppw.a`), built from
 `comsupp/comsupp.cpp`. `comdef.h` links it, with `oleaut32`, `ole32` and
 `uuid`, as Visual C++'s links `comsuppw.lib`: clang honours that with
