@@ -10,7 +10,9 @@
 #            32-bit prefix (WINEPREFIX32, made with WINEARCH=win32 if it
 #            does not exist), 64-bit ones a 64-bit one (WINEPREFIX64,
 #            default: WINEPREFIX or ~/.wine)
-#   CONFIGS  the configs (default: every *-ddk.cfg in CFGDIR)
+#   CONFIGS  the configs (default: every *-ddk.cfg in CFGDIR but the ms-*
+#            ones of imported Microsoft DDKs, which tests/ms-sdk/kits-test.py
+#            tests)
 #   WORK     build folder (default: ./build-ddk-tests)
 : "${CFGDIR:?set CFGDIR}"
 here=$(cd "$(dirname "$0")" && pwd)
@@ -69,7 +71,7 @@ if [ -n "$WINE" ]; then
     -o client64.exe >client64.log 2>&1 || bad client64 client64.log
 fi
 
-for cfg in ${CONFIGS:-$(cd "$CFGDIR" && ls *-ddk.cfg)}; do
+for cfg in ${CONFIGS:-$(cd "$CFGDIR" && ls *-ddk.cfg | grep -v "^ms-")}; do
   name=${cfg%.cfg}
   for opt in O0 O2; do
     t=$name-$opt
