@@ -1,0 +1,114 @@
+# 1 "stdole2.idl" 1
+
+
+
+
+
+
+
+
+
+
+
+
+import "oaidl.idl";
+import "ocidl.idl";
+
+
+
+
+
+[uuid(00020430-0000-0000-C000-000000000046), version(2.0),
+ helpstring("OLE Automation")]
+library stdole
+{
+    interface IUnknown;
+    interface IDispatch;
+    interface IEnumVARIANT;
+
+    typedef [uuid(66504301-BE0F-101A-8BBB-00AA00300CAB), public] unsigned long OLE_COLOR;
+    typedef [uuid(66504302-BE0F-101A-8BBB-00AA00300CAB), public] long OLE_XPOS_PIXELS;
+    typedef [uuid(66504303-BE0F-101A-8BBB-00AA00300CAB), public] long OLE_YPOS_PIXELS;
+    typedef [uuid(66504304-BE0F-101A-8BBB-00AA00300CAB), public] long OLE_XSIZE_PIXELS;
+    typedef [uuid(66504305-BE0F-101A-8BBB-00AA00300CAB), public] long OLE_YSIZE_PIXELS;
+    typedef [uuid(66504306-BE0F-101A-8BBB-00AA00300CAB), public] long OLE_XPOS_HIMETRIC;
+    typedef [uuid(66504307-BE0F-101A-8BBB-00AA00300CAB), public] long OLE_YPOS_HIMETRIC;
+    typedef [uuid(66504308-BE0F-101A-8BBB-00AA00300CAB), public] long OLE_XSIZE_HIMETRIC;
+    typedef [uuid(66504309-BE0F-101A-8BBB-00AA00300CAB), public] long OLE_YSIZE_HIMETRIC;
+    typedef [uuid(6650430A-BE0F-101A-8BBB-00AA00300CAB), public] float OLE_XPOS_CONTAINER;
+    typedef [uuid(6650430B-BE0F-101A-8BBB-00AA00300CAB), public] float OLE_YPOS_CONTAINER;
+    typedef [uuid(6650430C-BE0F-101A-8BBB-00AA00300CAB), public] float OLE_XSIZE_CONTAINER;
+    typedef [uuid(6650430D-BE0F-101A-8BBB-00AA00300CAB), public] float OLE_YSIZE_CONTAINER;
+    typedef [uuid(66504313-BE0F-101A-8BBB-00AA00300CAB), public] int OLE_HANDLE;
+    typedef [uuid(6650430E-BE0F-101A-8BBB-00AA00300CAB), public] VARIANT_BOOL OLE_OPTEXCLUSIVE;
+    typedef [uuid(6650430F-BE0F-101A-8BBB-00AA00300CAB), public] VARIANT_BOOL OLE_CANCELBOOL;
+    typedef [uuid(66504310-BE0F-101A-8BBB-00AA00300CAB), public] VARIANT_BOOL OLE_ENABLEDEFAULTBOOL;
+
+    typedef [public] BSTR FONTNAME;
+    typedef [public] CY FONTSIZE;
+    typedef [public] VARIANT_BOOL FONTBOLD;
+    typedef [public] VARIANT_BOOL FONTITALIC;
+    typedef [public] VARIANT_BOOL FONTUNDERSCORE;
+    typedef [public] VARIANT_BOOL FONTSTRIKETHROUGH;
+
+    typedef enum OLE_TRISTATE { Unchecked = 0, Checked = 1, Gray = 2 } OLE_TRISTATE;
+
+    [uuid(BEF6E003-A874-101A-8BBA-00AA00300CAB)]
+    dispinterface Font
+    {
+    properties:
+        [id(0)] BSTR Name;
+        [id(2)] CY Size;
+        [id(3)] VARIANT_BOOL Bold;
+        [id(4)] VARIANT_BOOL Italic;
+        [id(5)] VARIANT_BOOL Underline;
+        [id(6)] VARIANT_BOOL Strikethrough;
+        [id(7)] short Weight;
+        [id(8)] short Charset;
+    methods:
+    };
+
+    [uuid(7BF80981-BF32-101A-8BBB-00AA00300CAB)]
+    dispinterface Picture
+    {
+    properties:
+        [id(0), readonly] OLE_HANDLE Handle;
+        [id(2)] OLE_HANDLE hPal;
+        [id(3), readonly] short Type;
+        [id(4), readonly] OLE_XSIZE_HIMETRIC Width;
+        [id(5), readonly] OLE_YSIZE_HIMETRIC Height;
+    methods:
+        [id(6)] void Render(int hdc, long x, long y, long cx, long cy,
+                            OLE_XPOS_HIMETRIC xSrc, OLE_YPOS_HIMETRIC ySrc,
+                            OLE_XSIZE_HIMETRIC cxSrc, OLE_YSIZE_HIMETRIC cySrc,
+                            void* prcWBounds);
+    };
+
+    [uuid(4EF6100A-AF88-11D0-9846-00C04FC29993)]
+    dispinterface FontEvents
+    {
+    properties:
+    methods:
+        [id(9)] void FontChanged([in] BSTR PropertyName);
+    };
+
+    interface IFont;
+    interface IPicture;
+    interface IFontDisp;
+    interface IPictureDisp;
+
+    [uuid(0BE35203-8F91-11CE-9DE3-00AA004BB851)]
+    coclass StdFont
+    {
+        [default] dispinterface Font;
+        [default, source] dispinterface FontEvents;
+        interface IFont;
+    };
+
+    [uuid(0BE35204-8F91-11CE-9DE3-00AA004BB851)]
+    coclass StdPicture
+    {
+        [default] dispinterface Picture;
+        interface IPicture;
+    };
+};

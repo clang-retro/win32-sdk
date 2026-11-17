@@ -15,6 +15,9 @@ scripts/build-unicows.sh         adds libunicows to it
 scripts/build-cxx.sh             adds libc++, libc++abi and libunwind (9x to XP)
 scripts/build-modern-sysroot.sh  sysroot for Vista and later, with libc++
 scripts/fix-ddk-headers.sh       fixes mingw-w64's DDK headers in a sysroot
+scripts/build-idl.sh             adds the .idl files and stdole2.tlb (below)
+idl/stdole2.idl                  the OLE Automation type library's source
+tools/midl.c                     midl, a MIDL-compatible front end for widl
 cfg/                             --config files for the toolchain package
                                  (*-ddk.cfg for kernel-mode drivers)
 tools/check-imports.py           checks a program's or driver's imports for a
@@ -114,6 +117,31 @@ clang --target=i386-pc-windows4.0-gnu --sysroot=$SYSROOT -fuse-ld=lld \
 clang --target=i386-pc-windows4.0-gnu --sysroot=$SYSROOT -fuse-ld=lld \
   -mwindows gui.c -o gui.exe
 ```
+
+### IDL, ODL and type libraries
+
+Every Windows sysroot has mingw-w64's `.idl` and `.acf` files in
+`include/` and the OLE Automation type libraries `stdole2.tlb` and
+`stdole32.tlb` in `lib/` (built from `idl/stdole2.idl`). The toolchain
+package's `midl` compiles a project's `.idl` or `.odl` file with Wine's
+`widl`, taking Microsoft MIDL's command line:
+
+```sh
+midl /win32 /h calc_h.h /iid calc_i.c /tlb calc.tlb calc.idl
+midl /mktyplib203 /tlb calc.tlb /h calc_h.h calc.odl   # an MFC ODL file
+midl /proxy calc_p.c /dlldata dlldata.c /Oicf calc.idl
+```
+
+`midl` runs the `widl` beside it (or `$WIDL`) with the include and
+library paths of the sysroot `$MIDL_SYSROOT` (default `win2k-xp`) next to
+its `bin/` directory, so `import "oaidl.idl";` and
+`importlib("stdole2.tlb");` work. A `.odl` file (or `/mktyplib203`) is
+compiled with `oaidl.idl` and `ocidl.idl` imported first, as MKTYPLIB
+did. Options widl has no use for, such as `/nologo`, `/robust` and
+`/no_robust`, are accepted and ignored. A proxy DLL built from the
+`/proxy` and `/dlldata` files is compiled with `-DREGISTER_PROXY_DLL`
+(and `-DPROXY_DELEGATION` for proxies of derived interfaces) and linked
+with `-lrpcrt4 -loleaut32 -luuid`.
 
 ### The C runtime DLL
 
