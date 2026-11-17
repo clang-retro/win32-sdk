@@ -11,7 +11,7 @@ NAME_DDB at ordinal 1, in a locked object, and that
 the DDB it points at has that NAME, the DDK version (4.00, or 3.10 for
 Windows 3.1) in it and in the LE header, its "Prev" and
 "Rsv1".."Rsv3" signatures and the right size, and a control procedure
-with a fixup in a code object. It prints what it found. The exit status
+with a fixup in locked code. It prints what it found. The exit status
 is 1 when something is wrong.
 """
 import argparse
@@ -228,6 +228,9 @@ def check(path, want_kind):
         if not m.objects[tobj - 1][2] & 4:
             bad.append("DDB_Control_Proc points into object %d, which is "
                        "not executable" % tobj)
+        elif object_kind(m.objects[tobj - 1][2]) != "locked code":
+            bad.append("DDB_Control_Proc points into object %d, which is "
+                       "not locked code" % tobj)
         else:
             print("  control procedure at %d:%08x" % (tobj, ctl[0][3]))
     return bad

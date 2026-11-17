@@ -1,9 +1,12 @@
 #!/bin/sh
 # Build the test VxD (hello.c) at -O0, -O2 and -Os as a dynamic, a static
-# and a Windows 3.1 VxD, and check each one with vxd-check.py. No emulator
-# runs VxDs: with WIN9X_RUN, a command that takes a folder holding
-# HELLO.VXD and CLIENT.EXE, runs CLIENT.EXE on a real Windows 9x and prints
-# what it wrote to RESULT.TXT, the dynamic ones are loaded too.
+# and a Windows 3.1 VxD, services.c's (VMM services, and init and pageable
+# code and data) at each level as a dynamic one, linktest.c's, and
+# msddk.c's with each ms-*-vxd.cfg (import-ms-sdk.py's VxD kits) in CFGDIR,
+# and check each one with vxd-check.py. No emulator runs VxDs: with WIN9X_RUN,
+# a command that takes a folder holding a VxD and CLIENT.EXE, runs
+# "CLIENT.EXE NAME.VXD" on a real Windows 9x and prints what it wrote to
+# RESULT.TXT, the dynamic ones are loaded too.
 #
 #   CFGDIR   a toolchain package's bin/ (clang, jwlink, the config files),
 #            with the win9x-msvcrt sysroot in ../sysroots
@@ -39,6 +42,41 @@ for kind in dynamic static win31; do
     pass=$((pass + 1))
   done
 done
+# One VxD: build SRC with the config and flags, link and check it.
+vxd() { # NAME SRC CFG CHECK LINKFLAGS -- CFLAGS...
+  t=$1 src=$2 cfg=$3 chk=$4 lf=$5
+  shift 6
+  if ! "$CFGDIR/clang" --config="$CFGDIR/$cfg" "$@" -c "$src" -o "$t.o" \
+       >"$t.log" 2>&1; then
+    bad "$t build" "$t.log"; return
+  fi
+  if ! $link $lf -o "$t.vxd" "$t.o" >"$t.log" 2>&1; then
+    bad "$t link" "$t.log"; return
+  fi
+  if ! $PY "$tools/vxd-check.py" $chk "$t.vxd" >"$t.chk" 2>&1; then
+    bad "$t vxd-check" "$t.chk"; return
+  fi
+  pass=$((pass + 1))
+}
+for opt in O0 O2 Os; do
+  vxd svc-$opt "$here/services.c" win95-vxd.cfg --dynamic "--name SVCTEST" \
+    -- -$opt -Wall -Werror
+  # Each kind of object, as services.c asks for them.
+  for k in "init code" "pageable code" "init data" "pageable data"; do
+    grep -q "$k" svc-$opt.chk 2>/dev/null ||
+      { echo "no $k object" >>svc-$opt.chk; bad "svc-$opt kinds" svc-$opt.chk; }
+  done
+done
+vxd linktest "$here/linktest.c" win95-vxd.cfg --dynamic "" \
+  -- -O2 -DVXD_WINVER=0x045A -Wall -Werror
+# The VxD kits import-ms-sdk.py made from Microsoft's DDKs, if any: a VxD
+# written the DDK's way, with its headers and VXDWRAPS.CLB.
+for c in "$CFGDIR"/ms-*-vxd.cfg; do
+  [ -f "$c" ] || continue
+  kit=$(basename "$c" .cfg)
+  vxd $kit "$here/msddk.c" "$kit.cfg" --dynamic "--name MSDDK --kit $kit" \
+    -- -O2 -Wall -Werror
+done
 if [ -n "${WIN9X_RUN:-}" ]; then
   "$CFGDIR/clang" --config="$CFGDIR/win98.cfg" -O2 "$here/client.c" \
     -o client.exe >client.log 2>&1 || bad client client.log
@@ -50,6 +88,16 @@ if [ -n "${WIN9X_RUN:-}" ]; then
     got=$($WIN9X_RUN "$t" 2>"$t.err" | tr -d '\r')
     case $got in
       "hello from clang vxd 428571431 4."*) pass=$((pass + 1)) ;;
+      *) echo "got: $got" >>"$t.err"; bad "$t run" "$t.err" ;;
+    esac
+    t=run-svc-$opt
+    rm -rf "$t" && mkdir "$t"
+    cp "svc-$opt.vxd" "$t/SVCTEST.VXD"
+    cp client.exe "$t/CLIENT.EXE"
+    got=$($WIN9X_RUN "$t" SVCTEST.VXD 2>"$t.err" | tr -d '\r')
+    case $got in
+      "services heap 1 reg 1234 timer 1 event 1 page 42 init 7")
+        pass=$((pass + 1)) ;;
       *) echo "got: $got" >>"$t.err"; bad "$t run" "$t.err" ;;
     esac
   done

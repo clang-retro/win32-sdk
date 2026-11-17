@@ -532,11 +532,39 @@ python3 share/clang-dos/vxd-check.py --dynamic HELLO.VXD
   other fields to return values in registers.
 - The control messages (`SYS_DYNAMIC_DEVICE_INIT`, `W32_DEVICEIOCONTROL`,
   ...), `struct DIOCParams`, and `DIOC_OPEN` and `DIOC_CLOSEHANDLE`.
-- `VXD_SERVICE(device, number)` and `VXD_INT20` for calling VMM and VxD
-  services with `int 20h`, plus `VMMCALL_Get_VMM_Version`,
-  `VMMCALL_Get_Cur_VM_Handle` and `VMMCALL_Get_Sys_VM_Handle`.
-- `libvxd.a` provides `memcpy`, `memmove`, `memset`, `memcmp` and
-  `strlen`. `libgcc.a` provides the 64-bit arithmetic.
+- The services of the VMM and of 40 VxDs of Windows 3.1 to ME (1,382 of
+  them, in `<vxdsvc.h>`, made from `tools/vxd-services.txt`).
+  `VXDSVC_name` is the dword that follows `int 20h` for each. A service
+  is defined when `VXD_WINVER` is at least the Windows version that has
+  it: 3.10 (`0x030A`) for `win31-vxd.cfg`, 4.00 by default, and
+  `-DVXD_WINVER=0x040A` for 98 or `0x045A` for ME. Services new since the
+  95 DDK count as ME's unless their table names 98, since no 98 DDK was
+  used.
+- `VxDCall(name, &regs)` calls a register service: it loads EAX to EBP
+  from a `struct vxd_regs`, calls the service, stores them back and
+  returns 1 if the service set the carry flag. The services called like C
+  functions (`_HeapAllocate`, `_RegOpenKey`, `_VWIN32_SetWin32Event`, the
+  StdCall and FastCall ones) are functions: `libvxd.a` has a stub for
+  each that jumps to the service. `<vxd.h>` declares the common ones with
+  their types (the heap, pages, the registry, VWIN32's events and APCs);
+  `<vxdsvc.h>` declares the rest with no parameter list (in C before
+  C23), or with their dword parameters for the StdCall and FastCall ones.
+- `VXD_CALLBACK(name, fn)` makes a procedure for the VMM to call with
+  registers (a time-out, an event, an I/O trap, an interrupt): it calls
+  `int fn(struct vxd_regs *r)` and sets the carry flag if `fn` returned
+  nonzero. `VMMCALL_Set_Global_Time_Out`, `VMMCALL_Schedule_Global_Event`,
+  `SHELL_SYSMODAL_Message`, `VMMCALL_Get_System_Time` and a few others
+  wrap common register services, and `struct VPICD_IRQ_Descriptor` and
+  the `HEAP*`, `PAGE*`, `PG_*`, `MB_*`, `HKEY_*` and I/O trap constants
+  go with them.
+- Code and data are locked (always in memory) unless marked:
+  `VXD_INIT_CODE` and `VXD_INIT_DATA` put them in `_ITEXT` and `_IDATA`,
+  thrown away once the VxD has initialized, and `VXD_PAGEABLE_CODE` and
+  `VXD_PAGEABLE_DATA` in `_PTEXT` and `_PDATA`, which can be paged out
+  (not for interrupt handlers). JWlink makes an object of each kind, with
+  the flags the VMM's loader tells them by.
+- `libvxd.a` also provides `memcpy`, `memmove`, `memset`, `memcmp` and
+  `strlen`, and `libgcc.a` the 64-bit arithmetic.
 
 `vxd-link.py` writes a dynamic VxD by default, the kind Win32 programs
 load with `CreateFile("\\\\.\\C:\\PATH\\HELLO.VXD", ...)` and call
@@ -545,15 +573,19 @@ with `DeviceIoControl`. `--static` writes one that SYSTEM.INI loads with
 `win31-vxd.cfg`, which sets `VXD_DDK_VERSION` to 3.10. The VxD's name
 defaults to the output's base name in upper case (at most 8 letters), and
 it must match the `NAME` given to `VXD_DEVICE`. `vxd-check.py` checks the
-LE header, the DDB and the control procedure.
+LE header, each object's kind, the DDB and the control procedure, which
+must be locked.
 
 `vxd/hello.c` is a dynamic VxD that answers an IOCTL with a 64-bit
 computation and the VMM's version, and `vxd/client.c` is its Win32
-client. `CFGDIR=~/clang-dos/bin sh vxd/run-tests.sh` builds it as a
-dynamic, static and Windows 3.1 VxD at `-O0`, `-O2` and `-Os`, and checks
-each build. No emulator runs VxDs, so with `WIN9X_RUN` set to a command
-that runs `CLIENT.EXE` on a real Windows 9x, the dynamic ones are loaded
-too.
+client. `vxd/services.c` allocates from the heap, writes and reads the
+registry, sets a time-out and an event from init code and answers from
+pageable code. `CFGDIR=~/clang-dos/bin sh vxd/run-tests.sh` builds
+`hello.c` as a dynamic, static and Windows 3.1 VxD and `services.c` as a
+dynamic one at `-O0`, `-O2` and `-Os`, and checks each build. No emulator
+runs VxDs, so with `WIN9X_RUN` set to a command that runs `CLIENT.EXE` on
+a real Windows 9x, the dynamic ones are loaded too. Both have run on
+Windows 98 SE.
 
 ## Redistributing the SDK
 
@@ -608,6 +640,9 @@ folder instead), and every kit found there is imported. Each one becomes
 | `xp-ddk` | `5.2.3970.1830 DDK (unpacked)` | `i586-pc-windows5.1-msvc` | Server 2003 SP1 DDK, XP drivers |
 | `ws03-ddk` | `5.2.3970.1830 DDK (unpacked)` | `i586-pc-windows5.2-msvc` | Server 2003 SP1 DDK, drivers |
 | `ws03-x64-ddk` | `5.2.3970.1830 DDK (unpacked)` | `x86_64-pc-windows5.2-msvc` | Server 2003 SP1 DDK, x64 drivers |
+| `w95-vxd` | `4.0 W95 DDK` | `i386-pc-windows4.0-msvc` | Windows 95 DDK, VxDs |
+| `w98-vxd` | `5.1.2600 DDK (unpacked)` | `i386-pc-windows4.10-msvc` | XP DDK's Windows ME headers, for Windows 98 VxDs |
+| `me-vxd` | `5.1.2600 DDK (unpacked)` | `i386-pc-windows4.90-msvc` | XP DDK, Windows ME VxDs |
 
 * The kits are used as Microsoft shipped them, so the 1996 SDK's
   compressed `.LI_` files must be expanded first (`expand -r`) and the
@@ -669,12 +704,35 @@ folder instead), and every kit found there is imported. Each one becomes
   without saying its size). The Windows Vista WDK and later are not
   supported yet.
 
+* The `-vxd` kits build VxDs the DDKs' way, with `vmm.h`, `vxdwraps.h`
+  and the other headers of `INC32` (`inc/win_me` in the XP DDK) and
+  `VXDWRAPS.CLB`: compile with `clang --config=ms-w95-vxd.cfg -c` and link
+  with `vxd-link.py --kit ms-w95-vxd`, which links the kit's library
+  before `libvxd.a`. The config does what the DDKs' makefiles did (`cl
+  -Zp -DIS_32`: structures packed, `-fpack-struct=1`), defines the
+  service sets the headers declare (`WIN40SERVICES`, and
+  `WIN403SERVICES` and `WIN41SERVICES` for 98, `WIN49SERVICES` for ME),
+  and allows Microsoft's inline assembly (`-fasm-blocks`). `<vxd.h>` is
+  copied into the sysroot: with these configs it includes `vmm.h` and
+  adds `VXD_DEVICE` for the DDB (the DDKs did it in assembly),
+  `VXD_CALLBACK`, `VXD_CALL` (`VxDCall` is the DDK's) and the code and
+  data kinds. The DDK's `#pragma VxD_LOCKED_CODE_SEG` and the like are
+  macros that name the pragma, which clang expands with
+  `-fms-extensions` as `cl` did. The sysroot's `vmm.h` and `vxdwraps.h`
+  are changed for clang: the macros of the service tables take fewer
+  arguments than `cl` allowed, `VxDCall` emits the service's number from
+  `<vxdsvc.h>` (clang's `_emit` takes numbers, not the enum's
+  constants), and `PREPEND` expands `CURSEG()` before pasting. The
+  Windows 3.1 DDK's VxD headers are MASM ones only and are not imported.
+
 `tests/ms-sdk/run-test.sh` tests the script with three small fake kits.
 `tests/ms-sdk/kits-test.py PACKAGE --run` builds and runs a program with
 each imported kit, for testing with the real ones: all seven user-mode ones
 built and ran on Windows 11 at `-O0` and `-O2`. With `--wine` it runs them
 in Wine and also loads `tests/ddk/hello.c` built with each `-ddk` kit as a
-Wine service: the six of them work in Wine 9.0.
+Wine service: the six of them work in Wine 9.0. `vxd/run-tests.sh` builds
+`vxd/msddk.c`, a VxD written with the DDKs' headers, with each `-vxd`
+kit it finds.
 
 ## License
 
