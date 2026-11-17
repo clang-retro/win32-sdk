@@ -20,6 +20,8 @@
 #   LIBUNICOWS_SRC  unpacked libunicows-1.1.2-src.tar.gz (win9x-msvcrt)
 #   PICOLIBC_SRC    clang-dos/picolibc checkout (win32-picolibc)
 #   WORK            build directory (default: ./build-sysroot-NAME)
+#   WIDL            a widl for the build machine (optional; otherwise one is
+#                   built from MINGW_SRC with HOST_CC or cc)
 set -e
 name=${1:?usage: build-sysroot.sh NAME OUTPUT} out=${2:?}
 : "${BIN:?set BIN}" "${LLVM_SRC:?set LLVM_SRC}" "${MINGW_SRC:?set MINGW_SRC}"
@@ -61,6 +63,24 @@ win-vista-x64)
 *)
   echo "unknown sysroot $name" >&2; exit 1 ;;
 esac
+# Visual C++'s COM support library, for comdef.h and #import. Not for
+# win32-picolibc, whose C library lacks what comdef.h needs (sprintf_s,
+# <new.h>).
+case $name in
+win2k-xp) cpu=i586 target=i686-w64-windows-gnu ;;
+win-vista) cpu=i686 target=i686-w64-windows-gnu ;;
+win-vista-x64) cpu= target=x86_64-w64-windows-gnu ;;
+*) cpu=i386 target=i686-w64-windows-gnu ;;
+esac
+if [ "$name" != win32-picolibc ]; then
+  WORK=$WORK/comsupp CPU=$cpu TARGET=$target sh "$here/scripts/build-comsupp.sh"
+fi
+# IDL files and the stdole type libraries, for midl.
+case $name in
+win-vista-x64) idl_env=win64 ;;
+*) idl_env=win32 ;;
+esac
+WORK=$WORK/idl IDL_ENV=$idl_env sh "$here/scripts/build-idl.sh"
 # The licences of what the sysroot holds, so that it can be passed on as it
 # is: this SDK, mingw-w64 (headers, CRT, import libraries) and LLVM
 # (compiler-rt builtins, libc++, libc++abi, libunwind).

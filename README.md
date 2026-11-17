@@ -15,6 +15,9 @@ scripts/build-unicows.sh         adds libunicows to it
 scripts/build-cxx.sh             adds libc++, libc++abi and libunwind (9x to XP)
 scripts/build-modern-sysroot.sh  sysroot for Vista and later, with libc++
 scripts/fix-ddk-headers.sh       fixes mingw-w64's DDK headers in a sysroot
+scripts/build-idl.sh             adds the .idl files and stdole2.tlb (below)
+idl/stdole2.idl                  the OLE Automation type library's source
+tools/midl.c                     midl, a MIDL-compatible front end for widl
 cfg/                             --config files for the toolchain package
                                  (*-ddk.cfg for kernel-mode drivers)
 tools/check-imports.py           checks a program's or driver's imports for a
@@ -114,6 +117,71 @@ clang --target=i386-pc-windows4.0-gnu --sysroot=$SYSROOT -fuse-ld=lld \
 clang --target=i386-pc-windows4.0-gnu --sysroot=$SYSROOT -fuse-ld=lld \
   -mwindows gui.c -o gui.exe
 ```
+
+### IDL, ODL and type libraries
+
+Every Windows sysroot has mingw-w64's `.idl` and `.acf` files in
+`include/` and the OLE Automation type libraries `stdole2.tlb` and
+`stdole32.tlb` in `lib/` (built from `idl/stdole2.idl`). The toolchain
+package's `midl` compiles a project's `.idl` or `.odl` file with Wine's
+`widl`, taking Microsoft MIDL's command line:
+
+```sh
+midl /win32 /h calc_h.h /iid calc_i.c /tlb calc.tlb calc.idl
+midl /mktyplib203 /tlb calc.tlb /h calc_h.h calc.odl   # an MFC ODL file
+midl /proxy calc_p.c /dlldata dlldata.c /Oicf calc.idl
+```
+
+`midl` runs the `widl` beside it (or `$WIDL`) with the include and
+library paths of the sysroot `$MIDL_SYSROOT` (default `win2k-xp`) next to
+its `bin/` directory, so `import "oaidl.idl";` and
+`importlib("stdole2.tlb");` work. A `.odl` file (or `/mktyplib203`) is
+compiled with `oaidl.idl` and `ocidl.idl` imported first, as MKTYPLIB
+did. Options widl has no use for, such as `/nologo`, `/robust` and
+`/no_robust`, are accepted and ignored. A proxy DLL built from the
+`/proxy` and `/dlldata` files is compiled with `-DREGISTER_PROXY_DLL`
+(and `-DPROXY_DELEGATION` for proxies of derived interfaces) and linked
+with `-lrpcrt4 -loleaut32 -luuid`.
+
+### #import and the COM support library
+
+`tlbimport` (`tools/tlbimport.cpp`, in the toolchain package next to
+`midl`) is the type library half of Visual C++'s `#import`: it reads a
+type library, either a `.tlb` file or the `TYPELIB` resource of a `.dll`,
+`.ocx`, `.exe` or `.olb`, and writes the `.tlh` and `.tli` headers that
+`#import` includes, with the same namespace, smart pointers (`IFooPtr`),
+`__declspec(property)` members, error-checking wrapper methods and
+`raw_` methods. `#import`'s attributes are passed as they are written in
+the directive:
+
+```sh
+tlbimport -L "$SYSROOT/lib" 'rename("FreeSpace","FreeSpaceX")' scrrun.dll
+tlbimport no_namespace named_guids calc.tlb
+```
+
+`-o DIR` picks where the headers go and `-L DIR` where the type libraries
+it imports (`stdole2.tlb`, ...) are found. Type libraries in the MSFT
+format, what MIDL, widl and `ICreateTypeLib2` write, are read; the older
+SLTG format is not.
+
+The headers compile with or without `-fms-extensions`. Without it, the
+GUIDs behind `__uuidof` come from mingw-w64's `__CRT_UUID_DECL`, and the
+`__declspec(property)` members are left out, so properties are reached
+through their `GetX` and `PutX` wrappers. The names of Windows API macros
+clash as they do with Visual C++, and the same `rename` attributes fix
+them (`GetFreeSpace` in `scrrun.dll`, `RGB` in `vbscript.dll`).
+
+The wrappers of dispinterfaces call `_com_dispatch_method` and the other
+functions `comdef.h` declares, and failed calls throw `_com_error`
+through `_com_issue_errorex`. Every Windows sysroot but `win32-picolibc`
+(where `comdef.h` needs C library functions picolibc lacks) has them in
+`libcomsupp.a` (also as `libcomsuppw.a`), built from
+`comsupp/comsupp.cpp`. `comdef.h` links it, with `oleaut32`, `ole32` and
+`uuid`, as Visual C++'s links `comsuppw.lib`: clang honours that with
+`-fms-extensions`; otherwise link with `-lcomsupp -loleaut32 -lole32
+-luuid`. The sysroots' `comdefsp.h` also defines the smart pointers of
+the system interfaces (`IUnknownPtr`, `IDispatchPtr`, ...) for clang, not
+only for Visual C++.
 
 ### The C runtime DLL
 

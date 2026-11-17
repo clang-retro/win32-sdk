@@ -17,7 +17,8 @@
 #
 # When the sysroot has libunicows.a (build-unicows.sh), the tests include a
 # Unicode build linked with it. When it has libc++.a (build-cxx.sh), the
-# tests include C++ programs. Wine reports the target's Windows version to
+# tests include C++ programs, and with libcomsupp.a (build-comsupp.sh) the
+# compiler COM support. Wine reports the target's Windows version to
 # each program (95, 98 or ME for the 4.x triples), so libc++ takes the paths
 # it takes there.
 : "${BIN:?set BIN}" "${SYSROOT:?set SYSROOT}"
@@ -66,6 +67,8 @@ for target in ${TARGETS:-i386-pc-windows4.0-gnu i486-pc-windows4.10-gnu \
   esac
   ttests=$tests
   [ -f "$SYSROOT/lib/libc++.a" ] && ttests="$ttests cxx threads fs tlsmain"
+  [ -f "$SYSROOT/lib/libc++.a" ] && [ -f "$SYSROOT/lib/libcomsupp.a" ] &&
+    ttests="$ttests com"
   for opt in ${OPTS:-O0 O2 Os}; do
     for t in $ttests; do
       name=$t-$target-$opt
@@ -77,10 +80,11 @@ for target in ${TARGETS:-i386-pc-windows4.0-gnu i486-pc-windows4.10-gnu \
       args=
       check=$name.exe
       case $t in
-        cxx | threads | fs | tlsmain)
+        cxx | threads | fs | tlsmain | com)
           cc="$BIN/clang++"
           src=$here/$t.cpp
           flags="-std=c++20 -stdlib=libc++"
+          [ $t = com ] && flags="$flags -lcomsupp -loleaut32 -lole32 -luuid"
           ;;
       esac
       # tlsmain loads a C++ DLL with thread_local variables at run time.
@@ -106,7 +110,7 @@ for target in ${TARGETS:-i386-pc-windows4.0-gnu i486-pc-windows4.10-gnu \
       fi
       case $t in
         hello) want="hello, world" ;;
-        libc | tchar | unicode | cxx | threads | fs | tlsmain)
+        libc | tchar | unicode | cxx | threads | fs | tlsmain | com)
           want="ALL PASSED" ;;
         *) want= ;;
       esac
