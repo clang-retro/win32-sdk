@@ -1,13 +1,18 @@
 /* A small NT kernel-mode driver, built by run-tests.sh with each *-ddk.cfg
    (mingw-w64's DDK headers) and by kits-test.py with each imported
-   ms-*-ddk.cfg (Microsoft's DDKs, NT 3.1 to Server 2003).
+   ms-*-ddk.cfg (Microsoft's DDKs, NT 3.1 to Server 2003) and
+   ms-w98-wdm.cfg (-DHELLO_WDM).
 
    It makes \Device\ClangHello and \DosDevices\ClangHello. Its one IOCTL
    takes a ULONG n and answers with "hello from clang" and the digits of
    n * 1000000007 / 7, a 64-bit multiplication and division, so the
    driver links the compiler's or the kernel's 64-bit arithmetic helpers.
    client.c calls it. It uses only what the NT 3.1 DDK has. */
+#ifdef HELLO_WDM
+#include <wdm.h> /* a WDM kit's (ms-w98-wdm), which has no ntddk.h */
+#else
 #include <ntddk.h>
+#endif
 
 #define IOCTL_HELLO \
   CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_BUFFERED, FILE_ANY_ACCESS)

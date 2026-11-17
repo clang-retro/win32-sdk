@@ -4,8 +4,9 @@ programs' PE headers and, on Windows or with --wine, run them.
 
     kits-test.py PACKAGE [--clang CLANG] [--run] [EXTRA CLANG FLAGS]
 
-The kernel-mode kits (ms-*-ddk.cfg) build the test driver ../ddk/hello.c
-instead; --wine loads it as a service in Wine (WINEPREFIX32 for 32-bit
+The kernel-mode kits (ms-*-ddk.cfg, and ms-w98-wdm.cfg with -DHELLO_WDM and
+its imports checked with check-imports.py --wdm 98) build the test driver
+../ddk/hello.c instead; --wine loads it as a service in Wine (WINEPREFIX32 for 32-bit
 drivers, which needs a prefix made with WINEARCH=win32, WINEPREFIX for
 64-bit ones) and runs ../ddk/client.c, built with the package's winxp.cfg
 or win7-x64.cfg, which talks to it.
@@ -91,7 +92,10 @@ def main():
                     " subsystem version to the linker by hand")
     a, extra = ap.parse_known_args()
     a.extra = [x for x in extra if x != "--"]
-    cfgs = sorted(glob.glob(os.path.join(a.package, "bin", "ms-*.cfg")))
+    # The VxD kits build VxDs, which ../../vxd/run-tests.sh tests.
+    cfgs = sorted(c for c in glob.glob(os.path.join(a.package, "bin",
+                                                    "ms-*.cfg"))
+                  if not c.endswith("-vxd.cfg"))
     if not cfgs:
         print("no ms-*.cfg in %s/bin" % a.package)
         return 1
@@ -103,7 +107,7 @@ def main():
         triple = re.search(r"--target=(\S+)", open(cfg).read()).group(1)
         want = re.search(r"windows(\d+)\.(\d+)", triple)
         want = (int(want.group(1)), int(want.group(2)))
-        driver = kit.endswith("-ddk")
+        driver = kit.endswith(("-ddk", "-wdm"))
         if driver and not ddk:
             print("%s: skipped (no ddk/hello.c)" % kit)
             continue
@@ -112,6 +116,8 @@ def main():
         src = (os.path.join(ddk, "hello.c") if driver
                else os.path.join(here, "kit-hello.c"))
         cmd = [a.clang, "--config=" + cfg, "-O2", src, "-o", exe] + a.extra
+        if kit.endswith("-wdm"):
+            cmd.append("-DHELLO_WDM")
         if a.stock_clang:
             v = "%d.%d" % want
             # -Xlinker: -Wl would split the version at the comma.
@@ -129,6 +135,21 @@ def main():
         ok = subv == want and osv == want
         if driver:
             ok = ok and subsystem == 1
+            # Its imports: by name (an import library the kit's import
+            # turned into one that imports #0 shows here), in the kernel of
+            # that version, and for the WDM kit only what Windows 98's WDM
+            # has.
+            if not triple.startswith("x86_64"):
+                how = (["--wdm", "98"] if kit.endswith("-wdm") else
+                       ["--nt", "%d.%d" % want])
+                chk = subprocess.run(
+                    [sys.executable, os.path.join(here, "..", "..", "tools",
+                                                  "check-imports.py")]
+                    + how + [exe], capture_output=True, text=True)
+                good = chk.returncode == 0 and "warning" not in chk.stdout
+                ok = ok and good
+                note += ", imports %s" % ("ok" if good
+                                          else "BAD:\n" + chk.stdout)
             note += ", %s" % ("native" if subsystem == 1 else
                               "NOT NATIVE (%d)" % subsystem)
             if a.wine:

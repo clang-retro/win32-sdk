@@ -11,7 +11,8 @@ VXD_PAGEABLE_CODE static DWORD calls(void) {
   n += VxDCall(Get_VMM_Version, &r);         /* register */
   n += VxDCall(VWIN32_GetCurrentProcessHandle, &r);
   n += (DWORD)_HeapAllocate(16, 0);          /* C, declared in vxd.h */
-  n += _GetVxDName(0, 0);                    /* C, declared in vxdsvc.h */
+  n += (DWORD)_GetVxDName(0, 0);             /* C, typed in vxdsvc.h */
+  n += _Allocate_Device_CB_Area(4, 0);       /* the same */
   n += _NtKernClose(0);                      /* stdcall */
   n += ObsoleteKfRaiseIrql(0);               /* fastcall */
   return n;

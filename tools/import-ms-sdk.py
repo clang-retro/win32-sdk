@@ -201,6 +201,22 @@ KITS = {
         "gs": True,
         "intrin-shim": True,
     },
+    # WDM drivers for Windows 98 (and ME, 2000 and later): the 98 DDK's
+    # wdm.h and wdm.lib, the import library of the kernel functions NTKERN
+    # gives WDM drivers. Check them with check-imports.py --wdm 98.
+    "w98-wdm": {
+        "name": "Windows 98 DDK, WDM drivers",
+        "folder": "4.10 DDK (unpacked)",
+        "triple": "i386-pc-windows4.0-msvc",
+        "msc": "11.0",
+        "include": ["inc/win98", "inc"],
+        "lib": ["lib/i386/free"],
+        "headers-from": ["nt40", "nt31"],
+        "kernel": True,
+        "wdm": True,
+        "kcrt": ["libcntpr"],
+        "old": True,
+    },
     # VxD kits: the Windows 9x DDKs' C headers (vmm.h, vxdwraps.h, ...) and
     # VXDWRAPS.CLB, for VxDs built with `clang --config=ms-KIT.cfg -c` and
     # linked with vxd-link.py --kit ms-KIT. "vxd" lists the service sets
@@ -233,6 +249,17 @@ KITS = {
         "lib": ["lib/win_me"],
         "vxd": ["WIN40SERVICES", "WIN403SERVICES", "WIN41SERVICES",
                 "WIN49SERVICES"],
+    },
+    # The Windows 3.1 DDK has MASM include files only: inc2h.py makes C
+    # headers of their equates and structures (vmm.h, vpicd.h, ...), used
+    # with vxd.h and win31-vxd.cfg. There is no VXDWRAPS.CLB: link with
+    # vxd-link.py --win31.
+    "w31-vxd": {
+        "name": "Windows 3.1 DDK, VxDs",
+        "folder": "3.1 DDK",
+        "include": ["ddk/WIN31/DDK/386/INCLUDE"],
+        "lib": [],
+        "masm": True,
     },
 }
 
@@ -406,6 +433,8 @@ def find(base, rels):
 
 def import_kit(name, kitdirs, package, llvm_lib):
     kit = KITS[name]
+    if kit.get("masm"):
+        return import_masm_vxd_kit(name, kitdirs, package)
     if kit.get("vxd"):
         return import_vxd_kit(name, kitdirs, package)
     base = kitdirs[name]
@@ -458,11 +487,12 @@ def import_kit(name, kitdirs, package, llvm_lib):
         shutil.rmtree(os.path.join(sysroot, "crt.tmp"))
         libs.sort()
     kernel = kit.get("kernel")
-    for need in ("ntddk.h", "string.h") if kernel else ("windows.h",
-                                                         "stdio.h"):
+    for need in ((("wdm.h" if kit.get("wdm") else "ntddk.h"), "string.h")
+                 if kernel else ("windows.h", "stdio.h")):
         if need not in includes:
             print("%s: warning: no %s" % (name, need), file=sys.stderr)
-    for need in (("ntoskrnl.lib", "hal.lib") if kernel else
+    for need in ((("wdm.lib",) if kit.get("wdm") else
+                  ("ntoskrnl.lib", "hal.lib")) if kernel else
                  ("kernel32.lib", "user32.lib")):
         if need not in libs:
             print("%s: warning: no %s" % (name, need), file=sys.stderr)
@@ -504,8 +534,8 @@ def import_kit(name, kitdirs, package, llvm_lib):
     # defines _MT as for it), else the single-threaded one. A driver links
     # the kernel and its C library instead.
     if kernel:
-        crtlibs = [l for l in ["ntoskrnl", "hal"] + kit["kcrt"]
-                   if l + ".lib" in libs]
+        kern = ["wdm"] if kit.get("wdm") else ["ntoskrnl", "hal"]
+        crtlibs = [l for l in kern + kit["kcrt"] if l + ".lib" in libs]
     else:
         crtlibs = [l[:-4] for l in ("libcmt.lib", "libc.lib")
                    if l in libs][:1]
@@ -689,6 +719,48 @@ def import_vxd_kit(name, kitdirs, package):
         f.write("\n".join(lines) + "\n")
     print("%s: %d headers, %d libraries -> bin/%s.cfg" %
           (sysname, len(includes), len(libs), sysname))
+    return True
+
+
+def import_masm_vxd_kit(name, kitdirs, package):
+    """The Windows 3.1 DDK: C headers made from its MASM include files by
+    inc2h.py, and a config that adds them to win31-vxd.cfg's."""
+    kit = KITS[name]
+    incdirs = find(kitdirs[name], kit["include"])
+    if len(incdirs) != len(kit["include"]):
+        print("%s: %s is missing %s" % (name, kitdirs[name],
+                                        ", ".join(kit["include"])),
+              file=sys.stderr)
+        return False
+    if not os.path.exists(os.path.join(package, "bin", "win31-vxd.cfg")):
+        print("%s: no bin/win31-vxd.cfg in %s" % (name, package),
+              file=sys.stderr)
+        return False
+    sysname = "ms-" + name
+    sysroot = os.path.join(package, "sysroots", sysname)
+    if os.path.exists(sysroot):
+        shutil.rmtree(sysroot)
+    os.makedirs(os.path.join(sysroot, "lib"))
+    incs = sorted(os.path.join(d, f) for d in incdirs
+                  for f in os.listdir(d) if f.lower().endswith(".inc"))
+    here = os.path.dirname(os.path.abspath(__file__))
+    r = subprocess.run([sys.executable, os.path.join(here, "inc2h.py"),
+                        os.path.join(sysroot, "include")] + incs,
+                       capture_output=True, text=True)
+    if r.returncode:
+        print("%s: inc2h.py failed: %s" % (name, r.stderr), file=sys.stderr)
+        return False
+    lines = [
+        "# %s (imported with import-ms-sdk.py): C headers made from its"
+        % kit["name"],
+        "# include files. Compile with -c and link with",
+        "# share/clang-dos/vxd-link.py --win31",
+        "@win31-vxd.cfg",
+        "-isystem <CFGDIR>/../sysroots/%s/include" % sysname,
+    ]
+    with open(os.path.join(package, "bin", sysname + ".cfg"), "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print("%s: %s -> bin/%s.cfg" % (sysname, r.stderr.strip(), sysname))
     return True
 
 

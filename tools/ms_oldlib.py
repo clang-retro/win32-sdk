@@ -269,6 +269,7 @@ def convert_import_lib(path, llvm_lib):
                                 "/out:" + out], capture_output=True, text=True)
             if r.returncode:
                 return "left as it is: llvm-lib failed: " + r.stdout + r.stderr
+            undecorate_exportas(out)
             bad = check_short(open(out, "rb").read(), dll, want)
             if bad:
                 return "left as it is: %d imports differ (%s)" % (len(bad), bad[0])
@@ -285,6 +286,32 @@ def convert_import_lib(path, llvm_lib):
         open(path, "wb").write(open(out, "rb").read())
     return "converted %d imports%s" % (
         len(imps), ", kept %d objects" % len(keep) if keep else "")
+
+
+def undecorate_exportas(path):
+    """Make each short import whose EXPORTAS name is its symbol without
+    the decoration (_Name@8 imported as Name, a stdcall function) an
+    undecorated one instead, which says the same and which every linker
+    reads: lld before 19 (a distribution's, with kits-test.py
+    --stock-clang) takes EXPORTAS for an import by ordinal, #0."""
+    d = bytearray(open(path, "rb").read())
+    n = 0
+    for off, _, m in members(bytes(d)):
+        if len(m) < 20 or m[:4] != b"\0\0\xff\xff":
+            continue
+        tinfo, = struct.unpack_from("<H", m, 18)
+        if (tinfo >> 2) & 7 != 4:
+            continue
+        sym = cstr(m, 20)
+        dll = cstr(m, 20 + len(sym) + 1)
+        exportas = cstr(m, 20 + len(sym) + len(dll) + 2)
+        if sym.lstrip("?@_").split("@")[0] == exportas:
+            struct.pack_into("<H", d, off + 60 + 18,
+                             (tinfo & ~(7 << 2)) | (3 << 2))
+            n += 1
+    if n:
+        open(path, "wb").write(bytes(d))
+    return n
 
 
 def check_short(d, dll, want):
