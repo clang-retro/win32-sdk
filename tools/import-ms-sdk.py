@@ -201,6 +201,39 @@ KITS = {
         "gs": True,
         "intrin-shim": True,
     },
+    # VxD kits: the Windows 9x DDKs' C headers (vmm.h, vxdwraps.h, ...) and
+    # VXDWRAPS.CLB, for VxDs built with `clang --config=ms-KIT.cfg -c` and
+    # linked with vxd-link.py --kit ms-KIT. "vxd" lists the service sets
+    # the headers declare (WIN41SERVICES: Windows 98's).
+    "w95-vxd": {
+        "name": "Windows 95 DDK, VxDs",
+        "folder": "4.0 W95 DDK",
+        "triple": "i386-pc-windows4.0-msvc",
+        "msc": "10.0",
+        "include": ["ddk/INC32"],
+        "lib": ["ddk/LIB"],
+        "vxd": ["WIN40SERVICES"],
+    },
+    "w98-vxd": {
+        "name": "Windows 98 VxDs, from the Windows XP DDK's Windows ME "
+                "headers (2600)",
+        "folder": "5.1.2600 DDK (unpacked)",
+        "triple": "i386-pc-windows4.10-msvc",
+        "msc": "12.0",
+        "include": ["WINDDK/inc/win_me"],
+        "lib": ["WINDDK/lib/win_me"],
+        "vxd": ["WIN40SERVICES", "WIN403SERVICES", "WIN41SERVICES"],
+    },
+    "me-vxd": {
+        "name": "Windows ME VxDs, from the Windows XP DDK (2600)",
+        "folder": "5.1.2600 DDK (unpacked)",
+        "triple": "i386-pc-windows4.90-msvc",
+        "msc": "12.0",
+        "include": ["WINDDK/inc/win_me"],
+        "lib": ["WINDDK/lib/win_me"],
+        "vxd": ["WIN40SERVICES", "WIN403SERVICES", "WIN41SERVICES",
+                "WIN49SERVICES"],
+    },
 }
 
 
@@ -373,6 +406,8 @@ def find(base, rels):
 
 def import_kit(name, kitdirs, package, llvm_lib):
     kit = KITS[name]
+    if kit.get("vxd"):
+        return import_vxd_kit(name, kitdirs, package)
     base = kitdirs[name]
     incdirs = find(base, kit["include"])
     libdirs = find(base, kit["lib"])
@@ -494,6 +529,164 @@ def import_kit(name, kitdirs, package, llvm_lib):
         extra = kernel_flags(kit["triple"]) + extra
     write_cfg(cfg, kit["name"], sysname, kit["triple"], kit["msc"], defines,
               crtlibs, os.name != "nt", extra, kernel)
+    print("%s: %d headers, %d libraries -> bin/%s.cfg" %
+          (sysname, len(includes), len(libs), sysname))
+    return True
+
+
+# What clang needs changed in the VxD DDKs' headers: the header, and
+# (regular expression, replacement) pairs, applied to the copies.
+VXD_EMIT = (r"    _asm int 20h \\\n"
+            r"    _asm _emit (VXDSVC_##service & 0xff) \\\n"
+            r"    _asm _emit (((VXDSVC_##service >> 8) & 0xff){hi}) \\\n"
+            r"    _asm _emit ((VXDSVC_##service >> 16) & 0xff) \\\n"
+            r"    _asm _emit ((VXDSVC_##service >> 24) & 0xff)\n")
+VXD_HEADER_FIXES = {
+    "vmm.h": [
+        # The service tables are enums made by macros that the headers call
+        # with fewer arguments than they take, which cl allows; and the
+        # macro that names a service must paste the name before it is
+        # expanded (vxdwraps.h defines _HeapAllocate as LCODE__HeapAllocate
+        # and the like).
+        (r"#define Begin_Service_Table\(device, seg\)",
+         r"#define Begin_Service_Table(device, ...)"),
+        (r"#define End_Service_Table\(device, seg\)",
+         r"#define End_Service_Table(device, ...)"),
+        (r"#define Declare_Service\(service, local\) \\\n"
+         r"\s*GetVxDServiceOrdinal\(service\),",
+         r"#define Declare_Service(service, ...) \\\n    __##service,"),
+        # (Windows 95's has no StdCall services.)
+        (r"#define Declare_SCService\(service, args, local\) \\\n"
+         r"\s*GetVxDServiceOrdinal\(service\),",
+         r"#define Declare_SCService(service, ...) \\\n    __##service,",
+         "optional"),
+        # VxDCall emits the service's number with _emit, which in clang
+        # takes numbers, not an enum's constants: take them from vxdsvc.h
+        # (of tools/vxd-services.txt), whose VXDSVC_ names are numbers.
+        (r"#define VxDCall\(service\)[^\n]*\n(?:[ \t]*_asm[^\n]*\n)*",
+         r"#define VXD_NO_SERVICE_DECLS\n#ifndef VXD_WINVER\n"
+         r"#define VXD_WINVER 0x7FFF\n#endif\n#include <vxdsvc.h>\n"
+         r"#define VxDCall(service) \\\n" + VXD_EMIT.format(hi="") + r"\n"),
+        (r"#define VxDJmp\(service\)[^\n]*\n(?:[ \t]*_asm[^\n]*\n)*",
+         r"#define VxDJmp(service) \\\n" + VXD_EMIT.format(hi=" | 0x80")
+         + r"\n"),
+    ],
+    "vxdwraps.h": [
+        # CURSEG()##_##Name pastes a ")": expand CURSEG() first.
+        (r"#define PREPEND\(Name\)\s+CURSEG\(\)##_##Name",
+         r"#define PREPEND(Name)       VXD_PREPEND_(CURSEG(), Name)\n"
+         r"#define VXD_PREPEND_(s, n)  VXD_PREPEND2_(s, n)\n"
+         r"#define VXD_PREPEND2_(s, n) s##_##n"),
+    ],
+}
+
+
+def fix_vxd_headers(incdir):
+    notes = []
+    for hdr, fixes in VXD_HEADER_FIXES.items():
+        p = os.path.join(incdir, hdr)
+        if not os.path.exists(p):
+            notes.append("warning: no %s" % hdr)
+            continue
+        with open(p, "rb") as f:
+            text = f.read().decode("latin-1")
+        crlf = "\r\n" in text
+        text = text.replace("\r\n", "\n")
+        done = need = 0
+        for fix in fixes:
+            text, n = re.subn(fix[0], fix[1], text)
+            if len(fix) < 3:
+                need += 1
+                done += bool(n)
+        if done != need:
+            notes.append("warning: %s: %d of %d fixes applied"
+                         % (hdr, done, need))
+        if crlf:
+            text = text.replace("\n", "\r\n")
+        with open(p, "wb") as f:
+            f.write(text.encode("latin-1"))
+    return notes
+
+
+def import_vxd_kit(name, kitdirs, package):
+    """A VxD kit: its headers, fixed for clang, with vxd.h and vxdsvc.h
+    from the package's win9x-msvcrt sysroot, its VXDWRAPS.CLB, and a
+    config that compiles VxDs as the DDK's makefiles do (cl -Zp -DIS_32);
+    vxd-link.py links them."""
+    kit = KITS[name]
+    base = kitdirs[name]
+    incdirs = find(base, kit["include"])
+    libdirs = find(base, kit["lib"])
+    if len(incdirs) != len(kit["include"]) or len(libdirs) != len(kit["lib"]):
+        print("%s: %s is missing some of %s" %
+              (name, base, ", ".join(kit["include"] + kit["lib"])),
+              file=sys.stderr)
+        return False
+    ours = os.path.join(package, "sysroots", "win9x-msvcrt", "include")
+    for f in ("vxd.h", "vxdsvc.h"):
+        if not os.path.exists(os.path.join(ours, f)):
+            print("%s: no %s in %s (the package's VxD support)"
+                  % (name, f, ours), file=sys.stderr)
+            return False
+    sysname = "ms-" + name
+    sysroot = os.path.join(package, "sysroots", sysname)
+    if os.path.exists(sysroot):
+        shutil.rmtree(sysroot)
+    includes = lower_tree(incdirs, os.path.join(sysroot, "include"),
+                          "include")
+    for n in fix_vxd_headers(os.path.join(sysroot, "include")):
+        print("%s: %s" % (name, n))
+    for f in ("vxd.h", "vxdsvc.h"):
+        shutil.copyfile(os.path.join(ours, f),
+                        os.path.join(sysroot, "include", f))
+        if f not in includes:
+            includes.append(f)
+    libs = []
+    os.makedirs(os.path.join(sysroot, "lib"))
+    for d in libdirs:
+        for f in sorted(os.listdir(d)):
+            if f.lower().endswith(".clb") and f.lower() not in libs:
+                shutil.copyfile(os.path.join(d, f),
+                                os.path.join(sysroot, "lib", f.lower()))
+                libs.append(f.lower())
+    for need in ("vmm.h", "vxdwraps.h", "basedef.h"):
+        if need not in includes:
+            print("%s: warning: no %s" % (name, need), file=sys.stderr)
+    if "vxdwraps.clb" not in libs:
+        print("%s: warning: no vxdwraps.clb" % name, file=sys.stderr)
+    includes.sort()
+    if os.name != "nt":
+        write_vfs(sysroot, includes, libs)
+    lines = [
+        "# %s (imported with import-ms-sdk.py): compile with -c and link"
+        % kit["name"],
+        "# with share/clang-dos/vxd-link.py --kit %s" % sysname,
+        "--target=%s" % kit["triple"],
+        "-nostdlibinc",
+        "-fms-compatibility-version=%s" % kit["msc"],
+        "-fasm-blocks",
+        "-isystem <CFGDIR>/../sysroots/%s/include" % sysname,
+        # The DDK's makefiles: cl -Zp (structures packed) -DIS_32.
+        "-fpack-struct=1",
+        "-DIS_32",
+        "-DVXD_MS_DDK",
+        # Ring 0: no FPU or SSE registers, no unwind tables.
+        "-ffreestanding -fno-builtin",
+        "-mno-sse -mno-mmx",
+        "-fno-stack-protector",
+        "-fno-asynchronous-unwind-tables",
+        "-fno-exceptions -fno-rtti",
+        "-fms-omit-default-lib",
+        "-Wno-microsoft -Wno-pragma-pack -Wno-ignored-pragmas",
+        "-Wno-nonportable-include-path",
+        "-Wno-gnu-zero-variadic-macro-arguments",
+    ]
+    if os.name != "nt":
+        lines.append("-vfsoverlay <CFGDIR>/../sysroots/%s/vfs.yaml" % sysname)
+    lines += ["-D%s" % d for d in kit["vxd"]]
+    os.makedirs(os.path.join(package, "bin"), exist_ok=True)
+    with open(os.path.join(package, "bin", sysname + ".cfg"), "w") as f:
+        f.write("\n".join(lines) + "\n")
     print("%s: %d headers, %d libraries -> bin/%s.cfg" %
           (sysname, len(includes), len(libs), sysname))
     return True
