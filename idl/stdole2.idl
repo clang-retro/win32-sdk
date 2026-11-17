@@ -1,0 +1,225 @@
+/*
+ * stdole2.idl - the OLE Automation type library (stdole2.tlb and, with
+ * STDOLE_VERSION 1.0, stdole32.tlb), for importlib() in a program's own
+ * type library.
+ *
+ * A type library that imports this one refers to its types by the
+ * library's GUID and version, so at run time the system's own stdole2.tlb
+ * supplies them; this one needs the same identity and the types programs
+ * name. The type library compiler also reads IUnknown and IDispatch from
+ * here, so they are declared in full rather than imported.
+ *
+ * Part of clang-retro win32-sdk.
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+import "wtypes.idl";
+
+#ifndef STDOLE_VERSION
+#define STDOLE_VERSION 2.0
+#endif
+
+[uuid(00020430-0000-0000-C000-000000000046), version(STDOLE_VERSION),
+ helpstring("OLE Automation")]
+library stdole
+{
+    /* The basic types the interfaces below use. VARIANT is in oaidl.idl,
+       which also declares IUnknown and IDispatch, so the few VARIANT
+       arguments here are untyped pointers; programs that import this
+       library get their VARIANTs from oaidl.idl. */
+    typedef struct GUID {
+        unsigned long Data1;
+        unsigned short Data2;
+        unsigned short Data3;
+        unsigned char Data4[8];
+    } GUID;
+
+    typedef struct DISPPARAMS {
+        void* rgvarg;
+        long* rgdispidNamedArgs;
+        unsigned int cArgs;
+        unsigned int cNamedArgs;
+    } DISPPARAMS;
+
+    typedef struct EXCEPINFO {
+        unsigned short wCode;
+        unsigned short wReserved;
+        BSTR bstrSource;
+        BSTR bstrDescription;
+        BSTR bstrHelpFile;
+        unsigned long dwHelpContext;
+        void* pvReserved;
+        void* pfnDeferredFillIn;
+        SCODE scode;
+    } EXCEPINFO;
+
+    [odl, uuid(00000000-0000-0000-C000-000000000046), hidden]
+    interface IUnknown
+    {
+        [restricted] HRESULT QueryInterface([in] GUID* riid, [out] void** ppvObj);
+        [restricted] unsigned long AddRef();
+        [restricted] unsigned long Release();
+    };
+
+    [odl, uuid(00020400-0000-0000-C000-000000000046), restricted]
+    interface IDispatch : IUnknown
+    {
+        [restricted] HRESULT GetTypeInfoCount([out] unsigned int* pctinfo);
+        [restricted] HRESULT GetTypeInfo([in] unsigned int itinfo, [in] unsigned long lcid,
+                                         [out] void** pptinfo);
+        [restricted] HRESULT GetIDsOfNames([in] GUID* riid, [in] char** rgszNames,
+                                           [in] unsigned int cNames, [in] unsigned long lcid,
+                                           [out] long* rgdispid);
+        [restricted] HRESULT Invoke([in] long dispidMember, [in] GUID* riid,
+                                    [in] unsigned long lcid, [in] unsigned short wFlags,
+                                    [in] DISPPARAMS* pdispparams, [out] void* pvarResult,
+                                    [out] EXCEPINFO* pexcepinfo, [out] unsigned int* puArgErr);
+    };
+
+    [odl, uuid(00020404-0000-0000-C000-000000000046), hidden]
+    interface IEnumVARIANT : IUnknown
+    {
+        HRESULT Next([in] unsigned long celt, [in] void* rgvar,
+                     [out] unsigned long* pceltFetched);
+        HRESULT Skip([in] unsigned long celt);
+        HRESULT Reset();
+        HRESULT Clone([out] IEnumVARIANT** ppenum);
+    };
+
+    typedef [uuid(66504301-BE0F-101A-8BBB-00AA00300CAB), public] unsigned long OLE_COLOR;
+    typedef [uuid(66504302-BE0F-101A-8BBB-00AA00300CAB), public] long OLE_XPOS_PIXELS;
+    typedef [uuid(66504303-BE0F-101A-8BBB-00AA00300CAB), public] long OLE_YPOS_PIXELS;
+    typedef [uuid(66504304-BE0F-101A-8BBB-00AA00300CAB), public] long OLE_XSIZE_PIXELS;
+    typedef [uuid(66504305-BE0F-101A-8BBB-00AA00300CAB), public] long OLE_YSIZE_PIXELS;
+    typedef [uuid(66504306-BE0F-101A-8BBB-00AA00300CAB), public] long OLE_XPOS_HIMETRIC;
+    typedef [uuid(66504307-BE0F-101A-8BBB-00AA00300CAB), public] long OLE_YPOS_HIMETRIC;
+    typedef [uuid(66504308-BE0F-101A-8BBB-00AA00300CAB), public] long OLE_XSIZE_HIMETRIC;
+    typedef [uuid(66504309-BE0F-101A-8BBB-00AA00300CAB), public] long OLE_YSIZE_HIMETRIC;
+    typedef [uuid(6650430A-BE0F-101A-8BBB-00AA00300CAB), public] float OLE_XPOS_CONTAINER;
+    typedef [uuid(6650430B-BE0F-101A-8BBB-00AA00300CAB), public] float OLE_YPOS_CONTAINER;
+    typedef [uuid(6650430C-BE0F-101A-8BBB-00AA00300CAB), public] float OLE_XSIZE_CONTAINER;
+    typedef [uuid(6650430D-BE0F-101A-8BBB-00AA00300CAB), public] float OLE_YSIZE_CONTAINER;
+    typedef [uuid(66504313-BE0F-101A-8BBB-00AA00300CAB), public] int OLE_HANDLE;
+    typedef [uuid(6650430E-BE0F-101A-8BBB-00AA00300CAB), public] VARIANT_BOOL OLE_OPTEXCLUSIVE;
+    typedef [uuid(6650430F-BE0F-101A-8BBB-00AA00300CAB), public] VARIANT_BOOL OLE_CANCELBOOL;
+    typedef [uuid(66504310-BE0F-101A-8BBB-00AA00300CAB), public] VARIANT_BOOL OLE_ENABLEDEFAULTBOOL;
+
+    typedef [public] BSTR FONTNAME;
+    typedef [public] CY FONTSIZE;
+    typedef [public] VARIANT_BOOL FONTBOLD;
+    typedef [public] VARIANT_BOOL FONTITALIC;
+    typedef [public] VARIANT_BOOL FONTUNDERSCORE;
+    typedef [public] VARIANT_BOOL FONTSTRIKETHROUGH;
+
+    typedef enum OLE_TRISTATE { Unchecked = 0, Checked = 1, Gray = 2 } OLE_TRISTATE;
+
+    [odl, uuid(BEF6E002-A874-101A-8BBA-00AA00300CAB), hidden]
+    interface IFont : IUnknown
+    {
+        [propget] HRESULT Name([out, retval] BSTR* pname);
+        [propput] HRESULT Name([in] BSTR pname);
+        [propget] HRESULT Size([out, retval] CY* psize);
+        [propput] HRESULT Size([in] CY psize);
+        [propget] HRESULT Bold([out, retval] VARIANT_BOOL* pbold);
+        [propput] HRESULT Bold([in] VARIANT_BOOL pbold);
+        [propget] HRESULT Italic([out, retval] VARIANT_BOOL* pitalic);
+        [propput] HRESULT Italic([in] VARIANT_BOOL pitalic);
+        [propget] HRESULT Underline([out, retval] VARIANT_BOOL* punderline);
+        [propput] HRESULT Underline([in] VARIANT_BOOL punderline);
+        [propget] HRESULT Strikethrough([out, retval] VARIANT_BOOL* pstrikethrough);
+        [propput] HRESULT Strikethrough([in] VARIANT_BOOL pstrikethrough);
+        [propget] HRESULT Weight([out, retval] short* pweight);
+        [propput] HRESULT Weight([in] short pweight);
+        [propget] HRESULT Charset([out, retval] short* pcharset);
+        [propput] HRESULT Charset([in] short pcharset);
+        [propget] HRESULT hFont([out, retval] OLE_HANDLE* phfont);
+        HRESULT Clone([out] IFont** ppfont);
+        HRESULT IsEqual([in] IFont* pfontOther);
+        HRESULT SetRatio([in] long cyLogical, [in] long cyHimetric);
+        HRESULT AddRefHfont([in] OLE_HANDLE hFont);
+        HRESULT ReleaseHfont([in] OLE_HANDLE hFont);
+    };
+
+    [uuid(BEF6E003-A874-101A-8BBA-00AA00300CAB)]
+    dispinterface Font
+    {
+    properties:
+        [id(0)] BSTR Name;
+        [id(2)] CY Size;
+        [id(3)] VARIANT_BOOL Bold;
+        [id(4)] VARIANT_BOOL Italic;
+        [id(5)] VARIANT_BOOL Underline;
+        [id(6)] VARIANT_BOOL Strikethrough;
+        [id(7)] short Weight;
+        [id(8)] short Charset;
+    methods:
+    };
+
+    typedef [public] Font IFontDisp;
+
+    [odl, uuid(7BF80980-BF32-101A-8BBB-00AA00300CAB), hidden]
+    interface IPicture : IUnknown
+    {
+        [propget] HRESULT Handle([out, retval] OLE_HANDLE* phandle);
+        [propget] HRESULT hPal([out, retval] OLE_HANDLE* phpal);
+        [propget] HRESULT Type([out, retval] short* ptype);
+        [propget] HRESULT Width([out, retval] OLE_XSIZE_HIMETRIC* pwidth);
+        [propget] HRESULT Height([out, retval] OLE_YSIZE_HIMETRIC* pheight);
+        HRESULT Render([in] int hdc, [in] long x, [in] long y, [in] long cx, [in] long cy,
+                       [in] OLE_XPOS_HIMETRIC xSrc, [in] OLE_YPOS_HIMETRIC ySrc,
+                       [in] OLE_XSIZE_HIMETRIC cxSrc, [in] OLE_YSIZE_HIMETRIC cySrc,
+                       [in] void* prcWBounds);
+        [propput] HRESULT hPal([in] OLE_HANDLE phpal);
+        [propget] HRESULT CurDC([out, retval] int* phdcOut);
+        HRESULT SelectPicture([in] int hdcIn, [out] int* phdcOut, [out] OLE_HANDLE* phbmpOut);
+        [propget] HRESULT KeepOriginalFormat([out, retval] VARIANT_BOOL* pfkeep);
+        [propput] HRESULT KeepOriginalFormat([in] VARIANT_BOOL pfkeep);
+        HRESULT PictureChanged();
+        HRESULT SaveAsFile([in] void* pstm, [in] VARIANT_BOOL fSaveMemCopy,
+                           [out] long* pcbSize);
+        [propget] HRESULT Attributes([out, retval] long* pdwAttr);
+        HRESULT SetHdc([in] OLE_HANDLE hdc);
+    };
+
+    [uuid(7BF80981-BF32-101A-8BBB-00AA00300CAB)]
+    dispinterface Picture
+    {
+    properties:
+        [id(0), readonly] OLE_HANDLE Handle;
+        [id(2)] OLE_HANDLE hPal;
+        [id(3), readonly] short Type;
+        [id(4), readonly] OLE_XSIZE_HIMETRIC Width;
+        [id(5), readonly] OLE_YSIZE_HIMETRIC Height;
+    methods:
+        [id(6)] void Render([in] int hdc, [in] long x, [in] long y, [in] long cx, [in] long cy,
+                            [in] OLE_XPOS_HIMETRIC xSrc, [in] OLE_YPOS_HIMETRIC ySrc,
+                            [in] OLE_XSIZE_HIMETRIC cxSrc, [in] OLE_YSIZE_HIMETRIC cySrc,
+                            [in] void* prcWBounds);
+    };
+
+    typedef [public] Picture IPictureDisp;
+
+    [uuid(4EF6100A-AF88-11D0-9846-00C04FC29993), hidden]
+    dispinterface FontEvents
+    {
+    properties:
+    methods:
+        [id(9)] void FontChanged([in] BSTR PropertyName);
+    };
+
+    typedef [public] FontEvents IFontEventsDisp;
+
+    [uuid(0BE35203-8F91-11CE-9DE3-00AA004BB851)]
+    coclass StdFont
+    {
+        [default] dispinterface Font;
+        [default, source] dispinterface FontEvents;
+        interface IFont;
+    };
+
+    [uuid(0BE35204-8F91-11CE-9DE3-00AA004BB851)]
+    coclass StdPicture
+    {
+        [default] dispinterface Picture;
+        interface IPicture;
+    };
+};
