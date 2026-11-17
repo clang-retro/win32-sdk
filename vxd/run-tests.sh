@@ -2,7 +2,8 @@
 # Build the test VxD (hello.c) at -O0, -O2 and -Os as a dynamic, a static
 # and a Windows 3.1 VxD, services.c's (VMM services, and init and pageable
 # code and data) and provider.c's (services and entry points of its own)
-# at each level as dynamic ones, linktest.c's, and
+# at each level as dynamic ones, linktest.c's, portdrv.c's (a VCOMM port
+# driver) in C99, C17 and C23, and
 # msddk.c's (msddk31.c's for the 3.1 one) with each ms-*-vxd.cfg (import-ms-sdk.py's VxD kits) in CFGDIR,
 # and check each one with vxd-check.py. No emulator runs VxDs: with WIN9X_RUN,
 # a command that takes a folder holding a VxD and CLIENT.EXE, runs
@@ -79,6 +80,12 @@ for opt in O0 O2 Os; do
     grep -q "$k" provide-$opt.chk 2>/dev/null ||
       { echo "no $k" >>provide-$opt.chk; bad "provide-$opt" provide-$opt.chk; }
   done
+done
+# A VCOMM port driver, in each C standard (<vcomm.h>'s layouts are
+# asserted in it).
+for std in c99 c17 c23; do
+  vxd portdrv-$std "$here/portdrv.c" win95-vxd.cfg --dynamic "--name PORTDRV" \
+    -- -O2 -std=$std -Wall -Wextra -Werror
 done
 vxd linktest "$here/linktest.c" win95-vxd.cfg --dynamic "" \
   -- -O2 -DVXD_WINVER=0x045A -Wall -Werror

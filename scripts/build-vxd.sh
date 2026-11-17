@@ -1,6 +1,7 @@
 #!/bin/sh
 # Add the VxD support to a Windows 9x sysroot (build-win9x.sh's):
 #   $SYSROOT/include/vxd.h     the DDB, control messages, VMM calls
+#   $SYSROOT/include/vcomm.h   what a VCOMM port driver hands to VCOMM
 #   $SYSROOT/include/vxdsvc.h  the services' numbers (tools/vxd-services.txt)
 #   $SYSROOT/lib/libvxd.a      memcpy, memset and the like for VxDs, the
 #                              Microsoft target's 64-bit division helpers,
@@ -15,7 +16,7 @@ set -e
 here=$(cd "$(dirname "$0")/.." && pwd)
 WORK=${WORK:-$PWD/build-vxd}
 mkdir -p "$WORK" "$SYSROOT/include" "$SYSROOT/lib"
-cp "$here/vxd/vxd.h" "$SYSROOT/include/"
+cp "$here/vxd/vxd.h" "$here/vxd/vcomm.h" "$SYSROOT/include/"
 rm -rf "$WORK/stubs"
 python3 "$here/tools/gen-vxd-wraps.py" --header "$SYSROOT/include/vxdsvc.h" \
   --stubs "$WORK/stubs"
