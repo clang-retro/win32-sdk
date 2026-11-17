@@ -11,7 +11,9 @@
 #   share/clang-dos/                check-imports.py, msvcrt-versions.txt,
 #                                   kernel-versions.txt,
 #                                   wdm9x-exports.txt, vxd-link.py,
-#                                   vxd-check.py, build-modern-sysroot.sh,
+#                                   drvsign.py,
+#                                   vxd-check.py, build-modern-sysroot.sh
+#                                   (and except3.S, its libntseh.a),
 #                                   README
 #   share/clang-dos/ddk/            the test driver and its client
 #   share/clang-dos/vxd/            the test VxD and its client
@@ -43,7 +45,8 @@ fi
 cp "$here/tools/check-imports.py" "$here/tools/msvcrt-versions.txt" \
   "$here/tools/kernel-versions.txt" "$here/tools/wdm9x-exports.txt" \
   "$here/scripts/build-modern-sysroot.sh" \
-  "$here/scripts/fix-ddk-headers.sh" "$here/tools/vxd-link.py" \
+  "$here/scripts/fix-ddk-headers.sh" "$here/kernel/except3.S" \
+  "$here/tools/vxd-link.py" "$here/tools/drvsign.py" \
   "$here/tools/vxd-check.py" "$d/share/clang-dos/"
 cp -R "$here/tests/ddk" "$d/share/clang-dos/ddk"
 cp -R "$here/vxd" "$d/share/clang-dos/vxd"

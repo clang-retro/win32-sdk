@@ -1,5 +1,5 @@
 /* Opens the device of hello.c, sends it IOCTL_HELLO with n = 3 and prints
-   the answer: "hello from clang 428571431 1". */
+   the answer: "hello from clang 428571431 1 seh 1". */
 #include <windows.h>
 #include <winioctl.h>
 #include <stdio.h>

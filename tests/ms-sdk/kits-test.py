@@ -166,7 +166,7 @@ def main():
                 prefix = None if x64 else os.environ.get("WINEPREFIX32")
                 rc, out = run_driver(exe, clients[x64], prefix)
                 note += "; loaded in Wine: %r (exit %d)" % (out, rc)
-                ok = ok and rc == 0 and out == "hello from clang 428571431 1"
+                ok = ok and rc == 0 and out == "hello from clang 428571431 1 seh 1"
             print("%s: %s %s" % (kit, "ok" if ok else "FAILED", note))
             if not ok:
                 failed.append(kit)
