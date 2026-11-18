@@ -167,6 +167,68 @@ MINIPORT_SPECS = {
    data."""),
 }
 
+# --wdm: headers mingw-w64 lacks for WDM and NT drivers, from the 2000 and
+# XP DDKs (which 98's and ME's WDM share); the NT types they use come from
+# mingw-w64's <ntddk.h>.
+WDM_SPECS = {
+    "hidport": (["hidport.h"], ["ntddk.h", "hidusage.h", "hidclass.h"],
+                """What a HID
+   minidriver (HIDUSB.SYS's kind, under HIDCLASS.SYS) needs:
+   HID_MINIDRIVER_REGISTRATION for HidRegisterMinidriver (-lhidclass),
+   HID_DEVICE_EXTENSION, the HID descriptor, and the internal IOCTL_HID_*
+   requests HIDCLASS sends the minidriver."""),
+    "1394": (["1394.h"], ["ntddk.h"], """The IEEE 1394 (FireWire) bus:
+   the I/O request block (IRB) a 1394 client driver sends the bus driver
+   in IOCTL_1394_CLASS requests, the REQUEST_* functions, address ranges,
+   isochronous resources, and the bus and node structures. Windows 98,
+   98 SE and ME (1394BUS.SYS) and 2000 and later take the same IRBs."""),
+    "dvp": (["dvp.h"], ["windef.h", "wingdi.h", "ddraw.h"],
+            """DirectDraw video ports
+   (VPE): the video port descriptions, connections and capabilities that
+   <ddrawint.h>'s video port callbacks take."""),
+    "ddrawint": (["ddrawint.h"], ["windef.h", "wingdi.h", "ddraw.h", "dvp.h"],
+                 """The DirectDraw HAL of an NT
+   display driver (<winddi.h> includes it): DD_HALINFO and the callback
+   tables DrvGetDirectDrawInfo and DrvEnableDirectDraw fill in, the
+   DD_*_GLOBAL and DD_*_LOCAL objects and the DD_*DATA each callback
+   gets."""),
+    "d3dnthal": (["d3dnthal.h"],
+                 ["windef.h", "wingdi.h", "ddraw.h", "dvp.h", "ddrawint.h",
+                  "d3dtypes.h", "d3dcaps.h"], """The Direct3D HAL of
+   an NT display driver (<winddi.h> includes it): D3DNTHAL_GLOBALDRIVERDATA,
+   the D3DNTHAL_CALLBACKS tables and the D3DNTHAL_*DATA each callback
+   gets, and the DirectX 6 and later command buffer (D3DNTHAL_DP2*)."""),
+    "dxmini": (["dxmini.h"], ["ntddk.h", "windef.h"], """Kernel-mode DirectDraw in
+   a video miniport (VIDEO_HW_INITIALIZATION_DATA's DirectX entry
+   points, IOCTL_VIDEO_QUERY_INTERFACE with GUID_DxApi): the DXAPI
+   callbacks for overlay flips, video port fields, capture, interrupts
+   and skip patterns, and the DDxxx structures each one gets. It needs
+   DWORD and BOOL, so it includes <ntdef.h> and <windef.h>, which work
+   after <miniport.h> or <ntddk.h>."""),
+}
+
+# What a generated header includes, where that differs from what the
+# DDK's needs first: a video miniport includes <miniport.h>, not
+# <ntddk.h>, and both work after <ntdef.h>.
+WDM_EMIT = {"dxmini": ["ntdef.h", "windef.h"]}
+# And what it declares itself, where the DDK's header does so only when
+# the kernel's headers are not there (which the generator always reads):
+# a video miniport has no <wdm.h>, so <dxmini.h> declares the MDL, with
+# wdm.h's layout, unless wdm.h did (MDL_MAPPING_FLAGS).
+WDM_TEXT = {"dxmini": """#ifndef MDL_MAPPING_FLAGS
+typedef struct _MDL {
+  struct _MDL *MdlNext;
+  short MdlSize;
+  short MdlFlags;
+  struct _EPROCESS *Process;
+  ULONG *lpMappedSystemVa;
+  ULONG *lpStartVa;
+  ULONG ByteCount;
+  ULONG ByteOffset;
+} MDL, *PMDL;
+#endif
+"""}
+
 KEYWORDS = set("""auto break case char const continue default do double else
 enum extern float for goto if inline int long register restrict return short
 signed sizeof static struct switch typedef union unsigned void volatile while
@@ -207,13 +269,14 @@ class Kit:
                 "-idirafter", self.block, "-ferror-limit=0", "-w"] + EXTRA + \
             list(args)
 
-    def source(self, includes, extra=""):
+    def source(self, includes, extra="", first=""):
         p = os.path.join(self.tmp, "t.c")
         with open(p, "w") as f:
             if PACKED:
                 f.write("#define WANTVXDWRAPS\n")
             else:
                 f.write("\n")
+            f.write(first)
             for h in includes:
                 f.write("#include <%s>\n" % h)
             f.write(extra)
@@ -551,6 +614,38 @@ def ast_of(kit, includes):
     return ast, errors, r.stderr
 
 
+def guids_of(kit, includes, files):
+    """The GUIDs the headers define with DEFINE_GUID: [(name, values)],
+    read from their definitions with INITGUID."""
+    src = kit.source(includes, first="#define INITGUID\n")
+    r = run(kit.cmd("-fsyntax-only", "-Xclang", "-ast-dump=json", src))
+    if not r.stdout:
+        return []
+    ast = json.loads(r.stdout)
+    Walker().node(ast)
+    out = []
+
+    def ints(n, acc):
+        if n.get("kind") == "IntegerLiteral":
+            acc.append(int(n["value"]))
+        for c in n.get("inner", []):
+            ints(c, acc)
+        return acc
+    for n in ast.get("inner", []):
+        if n.get("kind") != "VarDecl" or \
+                os.path.basename(n.get("_file") or "").lower() not in files:
+            continue
+        if "GUID" not in n.get("type", {}).get("qualType", ""):
+            continue
+        v = ints(n, [])
+        if len(v) == 11:
+            out.append((n["name"], v))
+    return out
+
+
+GUIDS = {}  # header -> [(gate, name, values)]
+
+
 # ---- the constants ----
 
 DEFINE = re.compile(r"#define ([A-Za-z_]\w*)(\(?)\s*(.*)$")
@@ -674,11 +769,24 @@ def main():
     args = sys.argv[1:]
     roots = None
     miniport = False
-    while args[:1] in (["--kits"], ["--miniport"]):
+    wdm = False
+    while args[:1] in (["--kits"], ["--miniport"], ["--wdm"]):
         if args[0] == "--kits":
             roots, args = args[1], args[2:]
+        elif args[0] == "--wdm":
+            wdm, args = True, args[1:]
         else:
             miniport, args = True, args[1:]
+    if wdm:
+        SPECS = WDM_SPECS
+        BASE = []
+        INCLUDE = os.path.join(HERE, "..", "kernel", "include")
+        LAYOUT = os.path.join(HERE, "..", "tests", "ddk", "wdm-layout")
+        GATE = "_WIN32_WINNT"
+        KITS = [("0x0500", "ms-w2k-ddk"), ("0x0501", "ms-xp-ddk")]
+        PRELUDE = []
+        PACKED = False
+        EXTRA = ["-fpack-struct=8", "-mrtd"]
     if miniport:
         SPECS = MINIPORT_SPECS
         BASE = []
@@ -701,7 +809,14 @@ def main():
     owner = {}      # name -> header that declares it
     base = {}       # name -> (gate, text, deps)
     base_order = []
-    for n in ours(cfgdir) if PACKED else ():
+    # mingw-w64's own headers that the WDM ones include first.
+    pres = []
+    for _, pre, _ in SPECS.values():
+        pres += [p for p in pre if p not in pres and
+                 p.lower() not in {f.lower() for v in SPECS.values()
+                                   for f in v[0]}]
+    for n in ours(cfgdir) if PACKED else \
+            ours(cfgdir, "nt4-ddk", pres) if wdm else ():
         owner[n] = "vxd"
     last = max(list(SPECS).index(w) for w in want)
     for name in list(SPECS)[:last + 1]:
@@ -718,6 +833,11 @@ def main():
                       file=sys.stderr)
                 continue
             d = Decls(ast, files)
+            if SPECS is WDM_SPECS:
+                for g, v in guids_of(kit, incl, files):
+                    have = GUIDS.setdefault(name, [])
+                    if g not in [x[1] for x in have]:
+                        have.append((gate, g, v))
             macros = macros_of(kit, incl, files)
             vals = evaluate(kit, incl, macros)
             lay = layout_values(kit, incl, d.records) \
@@ -739,12 +859,14 @@ def main():
                  ", ".join(base_order))
 
 
-def ours(cfgdir):
-    """The names <vxd.h> defines: macros, typedefs and tags."""
-    kit = Kit(cfgdir, "win95-vxd")
+def ours(cfgdir, cfg="win95-vxd", headers=("vxd.h",)):
+    """The names <vxd.h> (or HEADERS, with CFG) defines: macros, typedefs
+    and tags."""
+    kit = Kit(cfgdir, cfg)
     src = os.path.join(kit.tmp, "o.c")
     with open(src, "w") as f:
-        f.write("#include <vxd.h>\n")
+        for h in headers:
+            f.write("#include <%s>\n" % h)
     inc = ["-I", VXD]
     names = set()
     r = run(kit.cmd(*inc, "-E", "-dM", src))
@@ -873,19 +995,36 @@ def write(name, intro, per, files, owner, base, base_order):
     for n in corder:
         owner.setdefault(n, name)
     # Header.
-    guard = "%s_%s_H" % ("VXD" if PACKED else "MINIPORT9X", name.upper())
+    wdm = SPECS is WDM_SPECS
+    guard = "%s_%s_H" % ("VXD" if PACKED else "WDM" if wdm else "MINIPORT9X",
+                         name.upper())
     h = ["/* %s.h: %s\n\n   Made by tools/gen-vxd-headers.py from the names, "
-         "values and layouts\n   in the 95, 98 and ME DDKs; each "
+         "values and layouts\n   in the %s DDKs; each "
          "declaration is under the first\n   %s whose DDK has it. "
-         "*/\n" % (name, intro, GATE),
+         "*/\n" % (name, intro, "2000 and XP" if wdm else "95, 98 and ME",
+                    GATE),
          "#ifndef %s\n#define %s\n\n" % (guard, guard)]
     for i in PRELUDE:
         h.append("#include <%s>\n" % i)
     incs = {i.replace(".h", "") for i in includes}
+    first = []
     if not PACKED:
-        incs |= {i.replace(".h", "") for i in SPECS[name][1]}
-    for i in sorted(incs):
+        # In the order the DDK's header needs them.
+        pre = WDM_EMIT.get(name, SPECS[name][1]) if wdm \
+            else SPECS[name][1]
+        first = [i.replace(".h", "") for i in pre]
+    for i in first + sorted(incs - set(first)):
         h.append("#include <%s.h>\n" % i)
+    if GUIDS.get(name):
+        h.append("#include <guiddef.h>\n")
+        for gate, g, v in GUIDS[name]:
+            line = "DEFINE_GUID(%s, 0x%08x, 0x%04x, 0x%04x, %s);\n" % (
+                g, v[0], v[1], v[2], ", ".join("0x%02x" % b for b in v[3:]))
+            if gate != gates[0]:
+                line = "#if %s >= %s\n%s#endif\n" % (GATE, gate, line)
+            h.append(line)
+    if wdm and name in WDM_TEXT:
+        h.append(WDM_TEXT[name])
     if PACKED:
         h.append("\n#pragma pack(push, 1)\n")
     body = []
@@ -903,7 +1042,8 @@ def write(name, intro, per, files, owner, base, base_order):
         f.write("".join(h))
     # Layout test, from the 98 DDK.
     t = ["/* Made by tools/gen-vxd-headers.py: the layouts of <%s.h> as the "
-         "98 DDK's\n   compiler laid them out. */\n" % name,
+         "%s DDK's\n   compiler laid them out. */\n"
+         % (name, "XP" if wdm else "98"),
          "#define %s %s\n#include <%s.h>\n#include <stddef.h>\n"
          "#ifdef __cplusplus\n#define A(e) static_assert(e, #e);\n#else\n"
          "#define A(e) _Static_assert(e, #e);\n#endif\n"

@@ -33,8 +33,12 @@ NT 3.x loader predates the IAT directory, which later loaders use to make
 the table writable while they fill it in.
 
 Kernel-mode drivers (.sys files, native subsystem) are checked with --nt
-too: each import from ntoskrnl.exe, hal.dll, ndis.sys, scsiport.sys,
-videoprt.sys and tdi.sys must be in that version, as listed in
+too, and display and printer drivers (native DLLs that import
+win32k.sys): each import from ntoskrnl.exe, hal.dll, ndis.sys,
+scsiport.sys, videoprt.sys, tdi.sys, win32k.sys (from NT 4.0) and the
+class drivers (stream.sys, ks.sys, portcls.sys, usbd.sys, hidclass.sys,
+hidparse.sys, battc.sys and 1394bus.sys, from 2000) must be in that
+version, as listed in
 kernel-versions.txt (from the import libraries of the NT 3.1, NT 4.0,
 2000, XP and Server 2003 DDKs; a function from NT 3.5 or 3.51 counts as
 4.0's). Other modules are not checked.
@@ -48,9 +52,15 @@ With --wdm 98, 98se or me, a WDM driver (a .sys built for Windows 2000 and
 later too) is checked for Windows 98, 98 Second Edition or ME, where
 NTKERN.VXD loads it: it must be a native-subsystem image of version 4.x or
 older and import only the ntoskrnl.exe functions that version's wdm.lib
-names, and the PORTCLS.SYS and KS.SYS functions (a WDM audio driver's) its
-port class and kernel streaming drivers export (wdm9x-exports.txt, from
-the 98 and ME DDKs and the drivers of 98 SE and ME).
+names, and the functions of its PORTCLS.SYS and KS.SYS (port class and
+kernel streaming, a WDM audio driver's), USBD.SYS (a USB driver's) and
+HIDCLASS.SYS and HIDPARSE.SYS (a HID driver's), STREAM.SYS and
+USBCAMD.SYS (a stream class minidriver's, a camera's), BATTC.SYS (a
+battery's) and NDIS.SYS (a network miniport's) (wdm9x-exports.txt, from
+the 98 and ME DDKs and the drivers of 98 SE and ME). For 98 SE, those
+drivers' own lists count, as 98 SE's dropped some of 98's functions.
+NDIS.SYS's list is 98 SE's NDIS.VXD's and USBCAMD.SYS's 98's: for the
+other versions their imports are listed as not checked.
 
 The exit status is 1 when something is missing, 0 otherwise.
 """
@@ -511,6 +521,17 @@ def check_wdm(pe, which):
             module, name, *versions = line.split()
             have[(module, name)] = versions
     want = WDM_VERSIONS[which]
+    # 98 SE's own drivers (port class, kernel streaming, USBD, HID) are
+    # listed from its binaries, which dropped some functions of 98's: for
+    # those modules only the 98 SE list counts. The kernel's (NTKERN's)
+    # are 98's.
+    se_modules = {m for (m, _), v in have.items() if "4.10.2222" in v}
+    # The versions each module has a list for: 98's NDIS.SYS functions
+    # come from 98 SE's NDIS.VXD alone, USBCAMD.SYS's from 98's library.
+    coverage = {}
+    for (m, _), v in have.items():
+        coverage.setdefault(m, set()).update(v)
+    unchecked = set()
     label = "Windows " + WDM_NAMES[max(want)]
     bad = False
     if pe.subsystem != NATIVE:
@@ -522,11 +543,21 @@ def check_wdm(pe, which):
         bad = True
     for dll, name in pe.imports():
         versions = have.get((dll.lower(), name))
-        if versions is None:
+        need = want
+        if "4.10.2222" in want and dll.lower() in se_modules:
+            need = {"4.10.2222"}
+        if dll.lower() in coverage and not need & coverage[dll.lower()]:
+            if dll.lower() not in unchecked:
+                unchecked.add(dll.lower())
+                print("  warning: %s's functions are not checked: "
+                      "wdm9x-exports.txt has them only for %s"
+                      % (dll, " and ".join(WDM_NAMES[v] for v in
+                                           sorted(coverage[dll.lower()]))))
+        elif versions is None:
             print("  error: %s!%s is not one of the WDM functions of %s"
                   % (dll, name, label))
             bad = True
-        elif not want & set(versions):
+        elif not need & set(versions):
             print("  error: %s!%s is in the WDM of %s, not %s"
                   % (dll, name, " and ".join(WDM_NAMES[v] for v in versions),
                      label))

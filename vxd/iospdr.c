@@ -94,15 +94,8 @@ static DRP drp = {
 };
 
 /* IOS_Register takes the DRP on the stack and sets DRP_reg_result. */
-static void ios_register(DRP *d) {
-  __asm__ volatile("pushl %0\n\t"
-                   "int $0x20\n\t"
-                   ".long %c1\n\t"
-                   "addl $4, %%esp"
-                   :
-                   : "r"(d), "i"(VXDSVC_IOS_Register)
-                   : "eax", "ecx", "edx", "memory", "cc");
-}
+VXD_STACK_SERVICE(ios_register, IOS_Register);
+void ios_register(DRP *d);
 
 int vxd_control(DWORD msg, struct vxd_regs *r) {
   (void)r;

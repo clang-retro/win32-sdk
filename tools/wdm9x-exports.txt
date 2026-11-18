@@ -1,6 +1,10 @@
 # WDM functions of Windows 98, 98 SE and ME: module, name, the
 # versions whose library or driver has it. Made by
 # gen-wdm-exports.py.
+battc.sys BatteryClassInitializeDevice 4.10 4.10.2222 4.90
+battc.sys BatteryClassIoctl 4.10 4.10.2222 4.90
+battc.sys BatteryClassStatusNotify 4.10 4.10.2222 4.90
+battc.sys BatteryClassUnload 4.10 4.10.2222 4.90
 hal.dll ExAcquireFastMutex 4.10 4.90
 hal.dll ExReleaseFastMutex 4.10 4.90
 hal.dll KeFlushWriteBuffer 4.10 4.90
@@ -23,6 +27,37 @@ hal.dll WRITE_PORT_BUFFER_USHORT 4.10 4.90
 hal.dll WRITE_PORT_UCHAR 4.10 4.90
 hal.dll WRITE_PORT_ULONG 4.10 4.90
 hal.dll WRITE_PORT_USHORT 4.10 4.90
+hidclass.sys HidRegisterMinidriver 4.10 4.10.2222 4.90
+hidparse.sys HidP_FreeCollectionDescription 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetButtonCaps 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetCaps 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetCollectionDescription 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetData 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetExtendedAttributes 4.10.2222 4.90
+hidparse.sys HidP_GetLinkCollectionNodes 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetScaledUsageValue 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetSpecificButtonCaps 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetSpecificValueCaps 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetUsageValue 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetUsageValueArray 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetUsages 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetUsagesEx 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetValueCaps 4.10 4.10.2222 4.90
+hidparse.sys HidP_InitializeReportForID 4.10.2222 4.90
+hidparse.sys HidP_MaxDataListLength 4.10 4.10.2222 4.90
+hidparse.sys HidP_MaxUsageListLength 4.10 4.10.2222 4.90
+hidparse.sys HidP_SetData 4.10 4.10.2222 4.90
+hidparse.sys HidP_SetScaledUsageValue 4.10 4.10.2222 4.90
+hidparse.sys HidP_SetUsageValue 4.10 4.10.2222 4.90
+hidparse.sys HidP_SetUsageValueArray 4.10 4.10.2222 4.90
+hidparse.sys HidP_SetUsages 4.10 4.10.2222 4.90
+hidparse.sys HidP_SysPowerCaps 4.10 4.10.2222 4.90
+hidparse.sys HidP_SysPowerEvent 4.10 4.10.2222 4.90
+hidparse.sys HidP_TranslateUsageAndPagesToI8042ScanCodes 4.10.2222 4.90
+hidparse.sys HidP_TranslateUsagesToI8042ScanCodes 4.10 4.10.2222 4.90
+hidparse.sys HidP_UnsetUsages 4.10 4.10.2222 4.90
+hidparse.sys HidP_UsageAndPageListDifference 4.10.2222 4.90
+hidparse.sys HidP_UsageListDifference 4.10 4.10.2222 4.90
 ks.sys ??0CBaseUnknown@@QAE@ABU_GUID@@PAUIUnknown@@@Z 4.10.2222 4.90
 ks.sys ??0CBaseUnknown@@QAE@PAUIUnknown@@@Z 4.10.2222 4.90
 ks.sys ??1CBaseUnknown@@UAE@XZ 4.10.2222 4.90
@@ -269,6 +304,283 @@ ks.sys KsiPropertyDefaultClockGetTime 4.10 4.10.2222 4.90
 ks.sys KsiQueryObjectCreateItemsPresent 4.10.2222 4.90
 ks.sys _KsEdit 4.10.2222 4.90
 ks.sys _KsGenerateEvents 4.10.2222
+ndis.sys ArcFilterDprIndicateReceive 4.10.2222
+ndis.sys ArcFilterDprIndicateReceiveComplete 4.10.2222
+ndis.sys EthChangeFilterAddresses 4.10.2222
+ndis.sys EthCreateFilter 4.10.2222
+ndis.sys EthDeleteFilter 4.10.2222
+ndis.sys EthDeleteFilterOpenAdapter 4.10.2222
+ndis.sys EthFilterAdjust 4.10.2222
+ndis.sys EthFilterDprIndicateReceive 4.10.2222
+ndis.sys EthFilterDprIndicateReceiveComplete 4.10.2222
+ndis.sys EthFilterIndicateReceive 4.10.2222
+ndis.sys EthFilterIndicateReceiveComplete 4.10.2222
+ndis.sys EthNoteFilterOpenAdapter 4.10.2222
+ndis.sys EthNumberOfOpenFilterAddresses 4.10.2222
+ndis.sys EthQueryGlobalFilterAddresses 4.10.2222
+ndis.sys EthQueryOpenFilterAddresses 4.10.2222
+ndis.sys EthShouldAddressLoopBack 4.10.2222
+ndis.sys FddiChangeFilterLongAddresses 4.10.2222
+ndis.sys FddiChangeFilterShortAddresses 4.10.2222
+ndis.sys FddiCreateFilter 4.10.2222
+ndis.sys FddiDeleteFilter 4.10.2222
+ndis.sys FddiDeleteFilterOpenAdapter 4.10.2222
+ndis.sys FddiFilterAdjust 4.10.2222
+ndis.sys FddiFilterDprIndicateReceive 4.10.2222
+ndis.sys FddiFilterDprIndicateReceiveComplete 4.10.2222
+ndis.sys FddiFilterIndicateReceive 4.10.2222
+ndis.sys FddiFilterIndicateReceiveComplete 4.10.2222
+ndis.sys FddiNoteFilterOpenAdapter 4.10.2222
+ndis.sys FddiNumberOfOpenFilterLongAddresses 4.10.2222
+ndis.sys FddiNumberOfOpenFilterShortAddresses 4.10.2222
+ndis.sys FddiQueryGlobalFilterLongAddresses 4.10.2222
+ndis.sys FddiQueryGlobalFilterShortAddresses 4.10.2222
+ndis.sys FddiQueryOpenFilterLongAddresses 4.10.2222
+ndis.sys FddiQueryOpenFilterShortAddresses 4.10.2222
+ndis.sys FddiShouldAddressLoopBack 4.10.2222
+ndis.sys NDIS_BUFFER_TO_SPAN_PAGES 4.10.2222
+ndis.sys NdisAcquireReadWriteLock 4.10.2222
+ndis.sys NdisAcquireSpinLock 4.10.2222
+ndis.sys NdisAdjustBufferLength 4.10.2222
+ndis.sys NdisAllocateBuffer 4.10.2222
+ndis.sys NdisAllocateBufferPool 4.10.2222
+ndis.sys NdisAllocateMemory 4.10.2222
+ndis.sys NdisAllocateMemoryWithTag 4.10.2222
+ndis.sys NdisAllocatePacket 4.10.2222
+ndis.sys NdisAllocatePacketPool 4.10.2222
+ndis.sys NdisAllocatePacketPoolEx 4.10.2222
+ndis.sys NdisAllocateSpinLock 4.10.2222
+ndis.sys NdisAnsiStringToUnicodeString 4.10.2222
+ndis.sys NdisBufferLength 4.10.2222
+ndis.sys NdisBufferVirtualAddress 4.10.2222
+ndis.sys NdisCancelTimer 4.10.2222
+ndis.sys NdisClAddParty 4.10.2222
+ndis.sys NdisClCloseAddressFamily 4.10.2222
+ndis.sys NdisClCloseCall 4.10.2222
+ndis.sys NdisClDeregisterSap 4.10.2222
+ndis.sys NdisClDropParty 4.10.2222
+ndis.sys NdisClIncomingCallComplete 4.10.2222
+ndis.sys NdisClMakeCall 4.10.2222
+ndis.sys NdisClModifyCallQoS 4.10.2222
+ndis.sys NdisClOpenAddressFamily 4.10.2222
+ndis.sys NdisClRegisterSap 4.10.2222
+ndis.sys NdisCloseAdapter 4.10.2222
+ndis.sys NdisCloseConfiguration 4.10.2222
+ndis.sys NdisCloseFile 4.10.2222
+ndis.sys NdisCmActivateVc 4.10.2222
+ndis.sys NdisCmAddPartyComplete 4.10.2222
+ndis.sys NdisCmCloseAddressFamilyComplete 4.10.2222
+ndis.sys NdisCmCloseCallComplete 4.10.2222
+ndis.sys NdisCmDeactivateVc 4.10.2222
+ndis.sys NdisCmDeregisterSapComplete 4.10.2222
+ndis.sys NdisCmDispatchCallConnected 4.10.2222
+ndis.sys NdisCmDispatchIncomingCall 4.10.2222
+ndis.sys NdisCmDispatchIncomingCallQoSChange 4.10.2222
+ndis.sys NdisCmDispatchIncomingCloseCall 4.10.2222
+ndis.sys NdisCmDispatchIncomingDropParty 4.10.2222
+ndis.sys NdisCmDropPartyComplete 4.10.2222
+ndis.sys NdisCmMakeCallComplete 4.10.2222
+ndis.sys NdisCmModifyCallQoSComplete 4.10.2222
+ndis.sys NdisCmOpenAddressFamilyComplete 4.10.2222
+ndis.sys NdisCmRegisterAddressFamily 4.10.2222
+ndis.sys NdisCmRegisterSapComplete 4.10.2222
+ndis.sys NdisCoAssignInstanceName 4.10.2222
+ndis.sys NdisCoCreateVc 4.10.2222
+ndis.sys NdisCoDeleteVc 4.10.2222
+ndis.sys NdisCoRequest 4.10.2222
+ndis.sys NdisCoRequestComplete 4.10.2222
+ndis.sys NdisCoSendPackets 4.10.2222
+ndis.sys NdisCompleteBindAdapter 4.10.2222
+ndis.sys NdisCompleteCloseAdapter 4.10.2222
+ndis.sys NdisCompleteDmaTransfer 4.10.2222
+ndis.sys NdisCompleteOpenAdapter 4.10.2222
+ndis.sys NdisCompletePnPEvent 4.10.2222
+ndis.sys NdisCompleteQueryStatistics 4.10.2222
+ndis.sys NdisCompleteUnbindAdapter 4.10.2222
+ndis.sys NdisConvertStringToAtmAddress 4.10.2222
+ndis.sys NdisCopyBuffer 4.10.2222
+ndis.sys NdisCopyFromPacketToPacket 4.10.2222
+ndis.sys NdisDeregisterProtocol 4.10.2222
+ndis.sys NdisDprAcquireSpinLock 4.10.2222
+ndis.sys NdisDprAllocatePacket 4.10.2222
+ndis.sys NdisDprAllocatePacketNonInterlocked 4.10.2222
+ndis.sys NdisDprFreePacket 4.10.2222
+ndis.sys NdisDprFreePacketNonInterlocked 4.10.2222
+ndis.sys NdisDprReleaseSpinLock 4.10.2222
+ndis.sys NdisEqualString 4.10.2222
+ndis.sys NdisFreeBuffer 4.10.2222
+ndis.sys NdisFreeBufferPool 4.10.2222
+ndis.sys NdisFreeMemory 4.10.2222
+ndis.sys NdisFreePacket 4.10.2222
+ndis.sys NdisFreePacketPool 4.10.2222
+ndis.sys NdisFreeSpinLock 4.10.2222
+ndis.sys NdisGetBufferPhysicalArraySize 4.10.2222
+ndis.sys NdisGetCurrentProcessorCpuUsage 4.10.2222
+ndis.sys NdisGetCurrentSystemTime 4.10.2222
+ndis.sys NdisGetFirstBufferFromPacket 4.10.2222
+ndis.sys NdisGetReceivedPacket 4.10.2222
+ndis.sys NdisGetSystemUpTime 4.10.2222
+ndis.sys NdisIMAssociateMiniport 4.10.2222
+ndis.sys NdisIMDeInitializeDeviceInstance 4.10.2222
+ndis.sys NdisIMDeregisterDevice 4.10.2222
+ndis.sys NdisIMDeregisterLayeredMiniport 4.10.2222
+ndis.sys NdisIMGetBindingContext 4.10.2222
+ndis.sys NdisIMGetDeviceContext 4.10.2222
+ndis.sys NdisIMInitializeDeviceInstance 4.10.2222
+ndis.sys NdisIMInitializeDeviceInstanceEx 4.10.2222
+ndis.sys NdisIMQueueMiniportCallback 4.10.2222
+ndis.sys NdisIMRegisterDevice 4.10.2222
+ndis.sys NdisIMRegisterLayeredMiniport 4.10.2222
+ndis.sys NdisIMRevertBack 4.10.2222
+ndis.sys NdisIMSwitchToMiniport 4.10.2222
+ndis.sys NdisImmediateReadPciSlotInformation 4.10.2222
+ndis.sys NdisImmediateReadPortUchar 4.10.2222
+ndis.sys NdisImmediateReadPortUlong 4.10.2222
+ndis.sys NdisImmediateReadPortUshort 4.10.2222
+ndis.sys NdisImmediateReadSharedMemory 4.10.2222
+ndis.sys NdisImmediateWritePciSlotInformation 4.10.2222
+ndis.sys NdisImmediateWritePortUchar 4.10.2222
+ndis.sys NdisImmediateWritePortUlong 4.10.2222
+ndis.sys NdisImmediateWritePortUshort 4.10.2222
+ndis.sys NdisImmediateWriteSharedMemory 4.10.2222
+ndis.sys NdisInitAnsiString 4.10.2222
+ndis.sys NdisInitUnicodeString 4.10.2222
+ndis.sys NdisInitializeEvent 4.10.2222
+ndis.sys NdisInitializeReadWriteLock 4.10.2222
+ndis.sys NdisInitializeTimer 4.10.2222
+ndis.sys NdisInitializeWrapper 4.10.2222
+ndis.sys NdisInterlockedAddUlong 4.10.2222
+ndis.sys NdisInterlockedDecrement 4.10.2222
+ndis.sys NdisInterlockedIncrement 4.10.2222
+ndis.sys NdisInterlockedInsertHeadList 4.10.2222
+ndis.sys NdisInterlockedInsertTailList 4.10.2222
+ndis.sys NdisInterlockedPopEntryList 4.10.2222
+ndis.sys NdisInterlockedPushEntryList 4.10.2222
+ndis.sys NdisInterlockedRemoveHeadList 4.10.2222
+ndis.sys NdisMAllocateMapRegisters 4.10.2222
+ndis.sys NdisMAllocateSharedMemory 4.10.2222
+ndis.sys NdisMAllocateSharedMemoryAsync 4.10.2222
+ndis.sys NdisMCancelTimer 4.10.2222
+ndis.sys NdisMCloseLog 4.10.2222
+ndis.sys NdisMCmActivateVc 4.10.2222
+ndis.sys NdisMCmCreateVc 4.10.2222
+ndis.sys NdisMCmDeactivateVc 4.10.2222
+ndis.sys NdisMCmRegisterAddressFamily 4.10.2222
+ndis.sys NdisMCoActivateVcComplete 4.10.2222
+ndis.sys NdisMCoDeactivateVcComplete 4.10.2222
+ndis.sys NdisMCoIndicateReceivePacket 4.10.2222
+ndis.sys NdisMCoIndicateStatus 4.10.2222
+ndis.sys NdisMCoReceiveComplete 4.10.2222
+ndis.sys NdisMCoRequestComplete 4.10.2222
+ndis.sys NdisMCoSendComplete 4.10.2222
+ndis.sys NdisMCompleteBufferPhysicalMapping 4.10.2222
+ndis.sys NdisMCreateLog 4.10.2222
+ndis.sys NdisMDeregisterAdapterShutdownHandler 4.10.2222
+ndis.sys NdisMDeregisterDevice 4.10.2222
+ndis.sys NdisMDeregisterDmaChannel 4.10.2222
+ndis.sys NdisMDeregisterInterrupt 4.10.2222
+ndis.sys NdisMDeregisterIoPortRange 4.10.2222
+ndis.sys NdisMFlushLog 4.10.2222
+ndis.sys NdisMFreeMapRegisters 4.10.2222
+ndis.sys NdisMFreeSharedMemory 4.10.2222
+ndis.sys NdisMGetDeviceProperty 4.10.2222
+ndis.sys NdisMIndicateStatus 4.10.2222
+ndis.sys NdisMIndicateStatusComplete 4.10.2222
+ndis.sys NdisMInitializeScatterGatherDma 4.10.2222
+ndis.sys NdisMInitializeTimer 4.10.2222
+ndis.sys NdisMMapIoSpace 4.10.2222
+ndis.sys NdisMPciAssignResources 4.10.2222
+ndis.sys NdisMPromoteMiniport 4.10.2222
+ndis.sys NdisMQueryAdapterResources 4.10.2222
+ndis.sys NdisMQueryInformationComplete 4.10.2222
+ndis.sys NdisMReadDmaCounter 4.10.2222
+ndis.sys NdisMRegisterAdapterShutdownHandler 4.10.2222
+ndis.sys NdisMRegisterDevice 4.10.2222
+ndis.sys NdisMRegisterDmaChannel 4.10.2222
+ndis.sys NdisMRegisterInterrupt 4.10.2222
+ndis.sys NdisMRegisterIoPortRange 4.10.2222
+ndis.sys NdisMRegisterMiniport 4.10.2222
+ndis.sys NdisMRemoveMiniport 4.10.2222
+ndis.sys NdisMResetComplete 4.10.2222
+ndis.sys NdisMSendComplete 4.10.2222
+ndis.sys NdisMSendResourcesAvailable 4.10.2222
+ndis.sys NdisMSetAttributes 4.10.2222
+ndis.sys NdisMSetAttributesEx 4.10.2222
+ndis.sys NdisMSetInformationComplete 4.10.2222
+ndis.sys NdisMSetMiniportSecondary 4.10.2222
+ndis.sys NdisMSetPeriodicTimer 4.10.2222
+ndis.sys NdisMSleep 4.10.2222
+ndis.sys NdisMStartBufferPhysicalMapping 4.10.2222
+ndis.sys NdisMSynchronizeWithInterrupt 4.10.2222
+ndis.sys NdisMTransferDataComplete 4.10.2222
+ndis.sys NdisMUnmapIoSpace 4.10.2222
+ndis.sys NdisMWanIndicateReceive 4.10.2222
+ndis.sys NdisMWanIndicateReceiveComplete 4.10.2222
+ndis.sys NdisMWanSendComplete 4.10.2222
+ndis.sys NdisMWriteLogData 4.10.2222
+ndis.sys NdisMapFile 4.10.2222
+ndis.sys NdisOpenAdapter 4.10.2222
+ndis.sys NdisOpenConfiguration 4.10.2222
+ndis.sys NdisOpenConfigurationKeyByIndex 4.10.2222
+ndis.sys NdisOpenConfigurationKeyByName 4.10.2222
+ndis.sys NdisOpenFile 4.10.2222
+ndis.sys NdisOpenGlobalConfiguration 4.10.2222
+ndis.sys NdisOpenProtocolConfiguration 4.10.2222
+ndis.sys NdisOverrideBusNumber 4.10.2222
+ndis.sys NdisPacketPoolUsage 4.10.2222
+ndis.sys NdisQueryAdapterInstanceName 4.10.2222
+ndis.sys NdisQueryBuffer 4.10.2222
+ndis.sys NdisQueryBufferOffset 4.10.2222
+ndis.sys NdisQueryMapRegisterCount 4.10.2222
+ndis.sys NdisQueryReceiveInformation 4.10.2222
+ndis.sys NdisReEnumerateProtocolBindings 4.10.2222
+ndis.sys NdisReadConfiguration 4.10.2222
+ndis.sys NdisReadEisaSlotInformation 4.10.2222
+ndis.sys NdisReadMcaPosInformation 4.10.2222
+ndis.sys NdisReadNetworkAddress 4.10.2222
+ndis.sys NdisReadPciSlotInformation 4.10.2222
+ndis.sys NdisReadPcmciaAttributeMemory 4.10.2222
+ndis.sys NdisRegisterProtocol 4.10.2222
+ndis.sys NdisReleaseReadWriteLock 4.10.2222
+ndis.sys NdisReleaseSpinLock 4.10.2222
+ndis.sys NdisRequest 4.10.2222
+ndis.sys NdisReset 4.10.2222
+ndis.sys NdisResetEvent 4.10.2222
+ndis.sys NdisReturnPackets 4.10.2222
+ndis.sys NdisScheduleWorkItem 4.10.2222
+ndis.sys NdisSend 4.10.2222
+ndis.sys NdisSendPackets 4.10.2222
+ndis.sys NdisSetEvent 4.10.2222
+ndis.sys NdisSetPacketPoolProtocolId 4.10.2222
+ndis.sys NdisSetProtocolFilter 4.10.2222
+ndis.sys NdisSetTimer 4.10.2222
+ndis.sys NdisSetupDmaTransfer 4.10.2222
+ndis.sys NdisSystemProcessorCount 4.10.2222
+ndis.sys NdisTerminateWrapper 4.10.2222
+ndis.sys NdisTransferData 4.10.2222
+ndis.sys NdisUnchainBufferAtBack 4.10.2222
+ndis.sys NdisUnchainBufferAtFront 4.10.2222
+ndis.sys NdisUnicodeStringToAnsiString 4.10.2222
+ndis.sys NdisUnmapFile 4.10.2222
+ndis.sys NdisUpdateSharedMemory 4.10.2222
+ndis.sys NdisWaitEvent 4.10.2222
+ndis.sys NdisWriteConfiguration 4.10.2222
+ndis.sys NdisWriteErrorLogEntry 4.10.2222
+ndis.sys NdisWriteEventLogEntry 4.10.2222
+ndis.sys NdisWritePciSlotInformation 4.10.2222
+ndis.sys NdisWritePcmciaAttributeMemory 4.10.2222
+ndis.sys TrChangeFunctionalAddress 4.10.2222
+ndis.sys TrChangeGroupAddress 4.10.2222
+ndis.sys TrCreateFilter 4.10.2222
+ndis.sys TrDeleteFilter 4.10.2222
+ndis.sys TrDeleteFilterOpenAdapter 4.10.2222
+ndis.sys TrFilterAdjust 4.10.2222
+ndis.sys TrFilterDprIndicateReceive 4.10.2222
+ndis.sys TrFilterDprIndicateReceiveComplete 4.10.2222
+ndis.sys TrFilterIndicateReceive 4.10.2222
+ndis.sys TrFilterIndicateReceiveComplete 4.10.2222
+ndis.sys TrNoteFilterOpenAdapter 4.10.2222
+ndis.sys TrShouldAddressLoopBack 4.10.2222
 ntoskrnl.exe DbgBreakPoint 4.10 4.90
 ntoskrnl.exe DbgPrint 4.10 4.90
 ntoskrnl.exe ExAcquireFastMutexUnsafe 4.10 4.90
@@ -651,3 +963,67 @@ portcls.sys PcTerminateConnection 4.10 4.10.2222 4.90
 portcls.sys PcUnregisterIoTimeout 4.90
 portcls.sys PcValidateConnectRequest 4.10 4.10.2222 4.90
 portcls.sys PcVerifyFilterIsReady 4.10 4.10.2222 4.90
+stream.sys StreamClassAbortOutstandingRequests 4.10 4.10.2222 4.90
+stream.sys StreamClassCallAtNewPriority 4.10 4.10.2222 4.90
+stream.sys StreamClassCompleteRequestAndMarkQueueReady 4.10 4.10.2222 4.90
+stream.sys StreamClassDebugAssert 4.10 4.10.2222 4.90
+stream.sys StreamClassDebugPrint 4.10 4.10.2222 4.90
+stream.sys StreamClassDeviceNotification 4.10 4.10.2222 4.90
+stream.sys StreamClassFilterReenumerateStreams 4.90
+stream.sys StreamClassGetDmaBuffer 4.10 4.10.2222 4.90
+stream.sys StreamClassGetNextEvent 4.10 4.10.2222 4.90
+stream.sys StreamClassGetPhysicalAddress 4.10 4.10.2222 4.90
+stream.sys StreamClassLogError 4.10 4.10.2222 4.90
+stream.sys StreamClassPnPAddDeviceWorker 4.10 4.10.2222 4.90
+stream.sys StreamClassQueryMasterClock 4.10 4.10.2222 4.90
+stream.sys StreamClassQueryMasterClockSync 4.10 4.10.2222 4.90
+stream.sys StreamClassReadWriteConfig 4.10 4.10.2222 4.90
+stream.sys StreamClassReenumerateStreams 4.10 4.10.2222 4.90
+stream.sys StreamClassRegisterAdapter 4.10 4.10.2222 4.90
+stream.sys StreamClassRegisterFilterWithNoKSPins 4.10 4.10.2222 4.90
+stream.sys StreamClassScheduleTimer 4.10 4.10.2222 4.90
+stream.sys StreamClassStreamNotification 4.10 4.10.2222 4.90
+usbcamd.sys USBCAMD_AdapterReceivePacket 4.10
+usbcamd.sys USBCAMD_ControlVendorCommand 4.10
+usbcamd.sys USBCAMD_Debug_LogEntry 4.10
+usbcamd.sys USBCAMD_DriverEntry 4.10
+usbcamd.sys USBCAMD_GetRegistryKeyValue 4.10
+usbcamd.sys USBCAMD_SelectAlternateInterface 4.10
+usbd.sys USBD_AllocateDeviceName 4.10 4.10.2222 4.90
+usbd.sys USBD_CalculateUsbBandwidth 4.10 4.10.2222 4.90
+usbd.sys USBD_CompleteRequest 4.10 4.10.2222 4.90
+usbd.sys USBD_CreateConfigurationRequest 4.10 4.10.2222 4.90
+usbd.sys USBD_CreateConfigurationRequestEx 4.90
+usbd.sys USBD_CreateDevice 4.10 4.10.2222 4.90
+usbd.sys USBD_Debug_GetHeap 4.10 4.10.2222 4.90
+usbd.sys USBD_Debug_LogEntry 4.10 4.10.2222 4.90
+usbd.sys USBD_Debug_RetHeap 4.10 4.10.2222 4.90
+usbd.sys USBD_Dispatch 4.10 4.10.2222 4.90
+usbd.sys USBD_FreeDeviceMutex 4.10.2222 4.90
+usbd.sys USBD_FreeDeviceName 4.10 4.10.2222 4.90
+usbd.sys USBD_GetDeviceInformation 4.10 4.10.2222 4.90
+usbd.sys USBD_GetInterfaceLength 4.10 4.10.2222 4.90
+usbd.sys USBD_GetPdoRegistryParameter 4.10 4.10.2222 4.90
+usbd.sys USBD_GetSuspendPowerState 4.10.2222 4.90
+usbd.sys USBD_GetUSBDIVersion 4.10 4.10.2222 4.90
+usbd.sys USBD_InitializeDevice 4.10 4.10.2222 4.90
+usbd.sys USBD_MakePdoName 4.10 4.10.2222 4.90
+usbd.sys USBD_ParseConfigurationDescriptor 4.10 4.10.2222 4.90
+usbd.sys USBD_ParseConfigurationDescriptorEx 4.90
+usbd.sys USBD_ParseDescriptors 4.90
+usbd.sys USBD_QueryBusTime 4.10.2222 4.90
+usbd.sys USBD_RegisterHcDeviceCapabilities 4.10 4.10.2222 4.90
+usbd.sys USBD_RegisterHcFilter 4.10 4.90
+usbd.sys USBD_RegisterHostController 4.10 4.10.2222 4.90
+usbd.sys USBD_RemoveDevice 4.10 4.10.2222 4.90
+usbd.sys USBD_RestoreDevice 4.10 4.10.2222 4.90
+usbd.sys USBD_SetSuspendPowerState 4.10.2222 4.90
+usbd.sys USBD_WaitDeviceMutex 4.10.2222 4.90
+usbd.sys _USBD_CreateConfigurationRequestEx@8 4.10 4.10.2222 4.90
+usbd.sys _USBD_FreeDeviceMutex@4 4.10
+usbd.sys _USBD_GetSuspendPowerState@4 4.10
+usbd.sys _USBD_ParseConfigurationDescriptorEx@28 4.10 4.10.2222 4.90
+usbd.sys _USBD_ParseDescriptors@16 4.10 4.10.2222 4.90
+usbd.sys _USBD_RegisterHcFilter@8 4.10.2222
+usbd.sys _USBD_SetSuspendPowerState@8 4.10
+usbd.sys _USBD_WaitDeviceMutex@4 4.10

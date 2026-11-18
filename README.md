@@ -557,7 +557,10 @@ mingw-w64's headers start at Windows 2000 (`NTDDI_VERSION` 0x05000000),
 so `nt4-ddk` declares 2000's kernel API, and some functions it declares
 are not in NT 4.0's kernel. `check-imports.py --nt VERSION` checks a
 32-bit driver's imports from `ntoskrnl.exe`, `hal.dll`, `ndis.sys`,
-`scsiport.sys`, `videoprt.sys` and `tdi.sys` against the exports of each
+`scsiport.sys`, `videoprt.sys`, `tdi.sys`, `win32k.sys` (display
+drivers) and the class drivers (`stream.sys`, `ks.sys`, `portcls.sys`,
+`usbd.sys`, `hidclass.sys`, `hidparse.sys`, `battc.sys`, `1394bus.sys`,
+from the kits that have them) against the exports of each
 NT version from 3.1 to Server 2003 (`tools/kernel-versions.txt`, made by
 `tools/gen-kernel-versions.py` from the import libraries of the NT 3.1,
 NT 4.0, 2000, XP and Server 2003 DDKs; NT 3.5 and 3.51 count as 4.0):
@@ -574,7 +577,14 @@ drivers for it.
 
 `scripts/fix-ddk-headers.sh` fixes a mistake in mingw-w64's `wdm.h`
 (it tests `NTDDI_WINVISTA`, which nothing defines, so drivers for 2000
-and XP got Vista's IRP layout); `build-win9x.sh` and
+and XP got Vista's IRP layout), adds `STREAMAPI` to four `<strmini.h>`
+functions that lack it, makes `<ks.h>`'s callbacks `NTAPI` (KS.SYS calls
+them stdcall, as the DDK builds them with `cl -Gz`; mingw-w64 left them
+cdecl), makes `<ndis.h>` compile next to `<ntddndis.h>`
+and adds a comma its `NdisMWanIndicateReceiveComplete` lacks. It also
+copies in the DDK headers mingw-w64 lacks, from `kernel/include`
+(`share/clang-dos/ddk-include` in the package): `<hidport.h>`, `<1394.h>`,
+`<ddrawint.h>`, `<d3dnthal.h>`, `<dvp.h>`, `<dxmini.h>` and `<hdaudio.h>`. `build-win9x.sh` and
 `build-modern-sysroot.sh` run it on each sysroot.
 
 Drivers for Windows 95, 98 and ME are mostly VxDs (LE files, below), not
@@ -610,6 +620,156 @@ adapter driver that makes a topology port when its device starts, in C.
 `scripts/fix-ddk-headers.sh` makes `ksmedia.h` (which `<portcls.h>`
 includes) compile in kernel mode, where nothing defines the `TCHAR` of
 its `TRANSPORTBASICPARMS`.
+
+USB drivers import USBD.SYS. Link them with `-lusbd9x`, which
+`build-vxd.sh` makes from `tools/usbd9x-exports.txt`, not mingw-w64's
+`-lusbd`. 98's and 98 SE's USBD.SYS export
+`USBD_CreateConfigurationRequestEx`, `USBD_ParseConfigurationDescriptorEx`
+and `USBD_ParseDescriptors` only by their decorated names
+(`_USBD_CreateConfigurationRequestEx@8`). The 98 DDK's `usbd.lib` imports
+them by those names, and so does `-lusbd9x`; ME and Windows 2000 and
+later export them too. mingw-w64's library imports them undecorated, so
+the driver loads only on ME and later:
+
+```sh
+clang --config=nt4-ddk.cfg -O2 myusb.c -lusbd9x -o myusb.sys
+python3 share/clang-dos/check-imports.py --wdm 98 myusb.sys
+```
+
+HID drivers link mingw-w64's `-lhidparse` and `-lhidclass` (include
+`<hidusage.h>` before `<hidpi.h>`). A HID minidriver includes
+`<hidport.h>` (after `<hidusage.h>` and `<hidclass.h>`, which it
+includes itself), this SDK's own, which mingw-w64 lacks:
+`HID_MINIDRIVER_REGISTRATION` for `HidRegisterMinidriver`,
+`HID_DEVICE_EXTENSION`, the HID descriptor and the internal `IOCTL_HID_*`
+requests. `tools/gen-vxd-headers.py --wdm` made it, and `<1394.h>`, from
+the names, values and layouts of the 2000 and XP DDKs; what only XP has
+is under `_WIN32_WINNT >= 0x0501`. `tests/ddk/wdm-layout/` checks their
+layouts. `wdm9x-exports.txt` also has the functions of USBD.SYS, HIDCLASS.SYS and
+HIDPARSE.SYS, from the 98 DDK's libraries and the drivers of 98 SE and
+ME. 98 SE added `HidP_InitializeReportForID`, `HidP_GetExtendedAttributes`
+and two more. For these drivers and port class, `--wdm 98se` goes by
+98 SE's own driver: it dropped some of 98's functions, such as KS.SYS's
+`KsQuerySoftwareBusInterface`. `tests/ddk/usbdrv.c` is a USB client
+driver, `tests/ddk/hidparse.c` parses HID reports and
+`tests/ddk/hidmini.c` is a HID minidriver.
+
+HD Audio function drivers for Windows XP (with the UAA update,
+KB888111, which brought Microsoft's HD Audio bus driver, HDAUDBUS.SYS),
+Server 2003 and later include `<hdaudio.h>`, which mingw-w64 lacks and
+Microsoft first shipped in the Vista WDK. This SDK's is written from
+Microsoft's public documentation of the HD Audio DDI: the bus interface
+(`HDAUDIO_BUS_INTERFACE`, and `HDAUDIO_BUS_INTERFACE_BDL` for buffer
+descriptor lists) that the driver gets from the bus with
+`IRP_MN_QUERY_INTERFACE`, codec verbs and responses, stream and
+converter formats, and the callbacks. The Vista and later V2 and V3
+interfaces are not in it. No imported kit has the header, so its
+layouts are checked only against the sizes the documentation gives.
+`tests/ddk/hdafunc.c` queries the interface when its device starts,
+reads the controller's information and sends the codec a Get Parameter
+verb.
+
+1394 (FireWire) client drivers send IRBs to the bus driver with
+`IOCTL_1394_CLASS`, declared in `<1394.h>`; 1394BUS.SYS exports nothing
+a client calls, so they need no import library. `tests/ddk/fw1394.c`
+asks for the bus's generation count.
+
+Stream class minidrivers (video capture, TV tuners, `<strmini.h>`) link
+`-lstream`, the import library `build-vxd.sh` makes from
+`tools/stream9x-exports.txt`, as mingw-w64 has none. STREAM.SYS has 19
+functions in 98 and 98 SE, and ME's adds
+`StreamClassFilterReenumerateStreams`.
+`wdm9x-exports.txt` also has USBCAMD.SYS's (for USB cameras) from the
+98 DDK; 98 SE and ME have no list for it, so `--wdm 98se` and `--wdm me`
+warn that they do not check it rather than fail. `tests/ddk/streammini.c`
+registers a minidriver with `StreamClassRegisterAdapter`.
+
+AVStream minidrivers (`<ks.h>`, `-lks`, `KsInitializeDriver` with a
+device descriptor) load on 98 Second Edition and ME, whose KS.SYS
+brought AVStream; 98's does not have it. ME's KS.SYS added the stream
+pointer functions (`KsPinGetLeadingEdgeStreamPointer`,
+`KsStreamPointerAdvanceOffsetsAndUnlock` and the rest), so a pin-centric
+minidriver that uses them loads only on ME; `--wdm 98se` says which.
+mingw-w64's `<ks.h>` has the same layouts as the XP DDK's for the
+AVStream structures (descriptors, dispatch tables, `KSPIN`, `KSFILTER`,
+`KSDEVICE`, stream pointers). `tests/ddk/avstream.c` is a capture
+filter with one pin-centric output pin.
+
+NDIS 5 miniports (network adapters, `<ndis.h>` with `NDIS50_MINIPORT`,
+`-lndis`) are `.sys` files that 98 SE and ME load. 98 SE's NDIS.VXD
+resolves their imports from a table of 277 names in NDIS.VXD itself, not
+from an export table; `gen-wdm-exports.py` reads it from 98 SE's
+NDIS.VXD (found with NDIS.SYM) into `wdm9x-exports.txt`, and
+`--wdm 98se` checks against it. There is no such list for 98 or ME, so
+those two only warn. `tests/ddk/ndismini.c` registers a miniport with
+`NdisMRegisterMiniport`.
+
+Display drivers for NT 4.0 and later are DLLs that import WIN32K.SYS
+(GDI's engine, `<winddi.h>`, `-lwin32k`), with `DrvEnableDriver` as
+their entry point. `check-imports.py --nt` checks their imports against
+NT 4.0's, 2000's and XP's WIN32K.SYS (`EngAlphaBlend` and the rest of
+2000's are not in 4.0's). mingw-w64's `<winddi.h>` includes
+`<ddrawint.h>` and `<d3dnthal.h>`, the DirectDraw and Direct3D HAL that
+`DrvGetDirectDrawInfo` and `DrvEnableDirectDraw` fill in (`DD_HALINFO`,
+`DD_CALLBACKS`, `D3DNTHAL_GLOBALDRIVERDATA`, the `DD_*DATA` each callback
+gets, the DirectX 6 and later command buffer), and `<dvp.h>`, video
+ports, which mingw-w64 lacks. `gen-vxd-headers.py --wdm` made the three
+from the 2000 and XP DDKs, and `tests/ddk/wdm-layout/` checks their
+layouts; what only XP's has (DirectX 8 and 9) is under
+`_WIN32_WINNT >= 0x0501`:
+
+```sh
+clang --config=nt4-ddk.cfg -O2 -shared -Wl,--entry,_DrvEnableDriver@12 \
+  mydisp.c -lwin32k -o mydisp.dll
+python3 share/clang-dos/check-imports.py --nt 4.0 mydisp.dll
+```
+
+Video miniports (`<miniport.h>`, `<video.h>`, `-lvideoprt`) that do
+DirectDraw in kernel mode (overlay flips, video port fields, capture,
+for DXAPI.SYS) include `<dxmini.h>`, which mingw-w64 lacks;
+`gen-vxd-headers.py --wdm` made it from the 2000 and XP DDKs, with
+`GUID_DxApi`, and the miniport hands out its `DXAPI_INTERFACE` from
+`HwQueryInterface`. `tests/ddk/vidmini.c` is such a miniport. The
+generated headers have the DDKs' GUIDs (`DEFINE_GUID`) too.
+
+`tests/ddk/display.c` implements `DrvBitBlt` with `EngBitBlt` and has a
+DirectDraw and Direct3D HAL with one callback, `WaitForVerticalBlank`.
+
+`tools/mapsym.py` writes a `.SYM` file (MAPSYM's format), which WDEB386
+and SoftICE load. For a driver, it reads the symbols from the image's
+COFF symbol table, which the linker keeps unless `-s` strips it. That
+includes the static functions and variables, listed by section. Built
+with `-g`, the driver also gets line numbers from its DWARF line table, in
+MAPSYM's format: one table of code offsets and source lines for each
+source file:
+
+```sh
+clang --config=nt4-ddk.cfg -O2 -g myusb.c -lusbd9x -o myusb.sys
+python3 share/clang-dos/mapsym.py myusb.sys      # writes myusb.sym
+python3 share/clang-dos/mapsym.py --dump --lines myusb.sym
+```
+
+For WinDbg (and KD) on NT 4.0 and later, build with `-g -gcodeview` and
+have the linker write a PDB with `-Wl,--pdb=`. Add
+`-Wl,--Xlink=-pdbaltpath:%_PDB%` so that the image's debug directory
+names only the PDB, not the folder it was built in, and WinDbg finds it
+on its symbol path (`.sympath`) next to the driver. The PDB has the
+functions, their types, line numbers and the frame data that WinDbg
+needs to walk the stack through code built without frame pointers.
+`llvm-symbolizer --obj=mydrv.sys --pdb=mydrv.pdb ADDRESS` reads it the
+same way:
+
+```sh
+clang --config=winxp-ddk.cfg -O2 -g -gcodeview mydrv.c -o mydrv.sys \
+  -Wl,--pdb=mydrv.pdb -Wl,--Xlink=-pdbaltpath:%_PDB%
+```
+
+The PDB is version 7.0, which WinDbg 6 and later read; NT 4.0's own
+4.0 debuggers read only `.DBG` files and older PDBs, but WinDbg 6 debugs
+NT 4.0 targets. With `--pdb`, the linker leaves out the COFF symbol table
+and the DWARF that `mapsym.py` reads; to have both a PDB and a `.SYM`
+file from one build, add `-gdwarf` and
+`-Wl,--Xlink=-debug:symtab -Wl,--Xlink=-debug:dwarf`.
 
 `tests/ddk/hello.c` is a small driver that makes `\Device\ClangHello` and
 answers an IOCTL with a 64-bit computation and whether its `__except`
@@ -822,7 +982,7 @@ typedefs, under the same names as the DDK's:
 | `ifs.h` | the installable file system manager (`ioreq`, `IFSFN_*`, the handle function tables) |
 | `ior.h`, `blockdev.h`, `drp.h`, `ilb.h`, `sgd.h`, `med.h`, `vrp.h`, `aep.h`, `isp.h`, `irs.h`, `ios.h`, `dcb.h`, `iop.h`, `ida.h`, `ddb.h`, `dvt.h`, `ivt.h` | IOS and the layered block device drivers (`.PDR` port drivers and the rest) |
 | `ndis.h`, `netvxd.h` | NDIS 3.1 network drivers (from the 95 and 98 DDKs; ME's `ndis.h` is NDIS 5's, for WDM) |
-| `minivdd.h` | display mini-VDDs |
+| `minivdd.h` | display mini-VDDs (the VxD half of a 95, 98 or ME display driver): `vxd/minivdd.c` gets VDD.VXD's dispatch table with `VDD_Get_Mini_Dispatch_Table` at `Sys_Critical_Init` and fills in `VXD_CALLBACK`s at the function numbers it handles |
 | `mmdevldr.h` | MMDEVLDR, which loads sound cards' VxDs and 16-bit drivers (its services, `MMDEVLDR_Register_Device_Driver` and `_MMDEVLDR_SetDevicePresence` and the rest, are in `<vxdsvc.h>`) |
 | `vkd.h`, `vmd.h` | the keyboard (`SS_*` shift states, the hot key flags, `Paste_Rec`) and the mouse (`VMD_Type_*`, `Mouse_Instance`, the cursor drawing VxD structures) |
 
@@ -892,6 +1052,50 @@ stores its return value there. List the services in
 `Sys_Dynamic_Device_Init`. That calls the VMM's `_Register_Win32_Services`,
 which fills in the DDB's Win32 service table.
 
+More of what `<vxd.h>` has, each with a sample in `vxd/`:
+
+- **DeviceIoControl that finishes later** (`vxd/async.c`, called by
+  `vxd/asyncc.c`). When a program passes an OVERLAPPED, the VxD can lock
+  the output buffer and the OVERLAPPED with `vxd_lock_global` (global
+  addresses, valid in any context). It then returns `VXD_DIOC_PENDING`, so
+  `DeviceIoControl` fails with `ERROR_IO_PENDING`. Later, from a time-out,
+  an event or an interrupt, the VxD writes the answer, calls
+  `VWIN32_DIOCCompletion(overlapped, bytes)` (VWIN32's
+  `VWIN32_DIOCCompletionRoutine`) and unlocks both with
+  `vxd_unlock_global`. The program's `GetOverlappedResult` then returns
+  with the byte count.
+- **Hooking a service** (`vxd/hook.c`). `vxd_hook_service(VXDSVC_Name,
+  Hook, &prev)` makes every call to a VMM or VxD service go to `Hook`,
+  and `vxd_unhook_service` undoes that (95 and later; a dynamic VxD must
+  unhook before it unloads). `VXD_HOOK_REG(Hook, Fn, prev)` makes a hook
+  for a register service. It calls `int Fn(struct vxd_regs *)`, which
+  returns `VXD_HOOK_PASS` to go on to the previous handler, or
+  `VXD_HOOK_DONE` or `VXD_HOOK_FAIL` to return to the caller.
+  `VXD_HOOK_C(Hook, Fn, prev)` makes a hook for a C service. Both give the
+  hook the prologue the VMM uses to chain hooks (`jmp short`, then
+  `jmp [prev]`).
+- **Services that take their parameters on the stack**, such as
+  `IOS_Register`. `VXD_STACK_SERVICE(fn, Name)` defines `fn` as a stub
+  that jumps to the service (`int 20h` with the VxDJmp bit), so a
+  prototype and a call are all it needs. `vxd/iospdr.c` uses it.
+- **Calling real-mode code in the current VM** (`vxd/bios.c`).
+  `vxd_exec_int(n, &regs)` saves the VM's registers, runs software
+  interrupt `n` there with nested execution, with `struct vxd_int_regs`
+  in and out, and restores the registers. `bios.c` reads the base memory
+  size with INT 12h and the tick count with INT 1Ah.
+- **Debug output.** With `-DVXD_DEBUG`, `Trace_Out("text")` and
+  `Debug_Printf("fmt", ...)` print to the debugger (WDEB386, SoftICE or
+  the debug VMM's terminal). `VXD_ASSERT(e)` prints the file and line and
+  breaks into the debugger, if one is installed, when `e` is false.
+  Without `-DVXD_DEBUG` they compile to nothing.
+
+`vxd-link.py --sym HELLO.SYM` also writes a `.SYM` file for WDEB386 and
+SoftICE. `tools/mapsym.py` makes it from JWlink's map file, with the public
+and static symbols of each object. For objects compiled with `-g`, the
+file also gets their line numbers. JWlink leaves the DWARF out of the
+VxD, so `mapsym.py` reads each object's line table and places it using
+the map's symbols.
+
 `vxd-link.py` writes a dynamic VxD by default, the kind Win32 programs
 load with `CreateFile("\\\\.\\C:\\PATH\\HELLO.VXD", ...)` and call
 with `DeviceIoControl`. `--static` writes one that SYSTEM.INI loads with
@@ -910,11 +1114,12 @@ pageable code. `vxd/provider.c` provides services, V86 and PM entry
 points and two Win32 services. `client.c`, `vxd/apitest.c` (a DOS
 program) and `vxd/w32svc.c` call it, and all three ran on Windows 98 SE.
 `CFGDIR=~/clang-dos/bin sh vxd/run-tests.sh` builds `hello.c` as a
-dynamic, static and Windows 3.1 VxD, and `services.c` and `provider.c` as
-dynamic ones, at `-O0`, `-O2` and `-Os`, and checks each build. No emulator
-runs VxDs, so with `WIN9X_RUN` set to a command that runs `CLIENT.EXE` on
-a real Windows 9x, the dynamic ones are loaded too. Both have run on
-Windows 98 SE.
+dynamic, static and Windows 3.1 VxD, and `services.c`, `provider.c`,
+`async.c`, `hook.c` and `bios.c` as dynamic ones, at `-O0`, `-O2` and
+`-Os`, and checks each build. No emulator runs VxDs, so with `WIN9X_RUN`
+set to a command that runs `CLIENT.EXE` on a real Windows 9x, the dynamic
+ones are loaded too. `hello.c` and `services.c` have run on Windows 98
+SE; `async.c`, `hook.c` and `bios.c` have not yet.
 
 ## Redistributing the SDK
 
