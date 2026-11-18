@@ -31,6 +31,7 @@ tools/msvcrt-versions.txt        which msvcrt.dll has each function
 tools/gen-msvcrt-versions.py     makes msvcrt-versions.txt
 tests/                           the tests, run in Wine
 tests/ddk/                       the test driver and its tests
+drivers/hdaudio/                 an HD Audio driver for 98, 98 SE and ME
 ```
 
 ## The package's sysroots
@@ -609,6 +610,11 @@ adapter driver that makes a topology port when its device starts, in C.
 `scripts/fix-ddk-headers.sh` makes `ksmedia.h` (which `<portcls.h>`
 includes) compile in kernel mode, where nothing defines the `TCHAR` of
 its `TRANSPORTBASICPARMS`.
+
+[`drivers/hdaudio`](drivers/hdaudio/README.md) is a whole one: an HD
+Audio driver for 98, 98 SE and ME, with WaveCyclic and topology miniports
+in C, that drives Intel's HDA controllers (and QEMU's) and their codecs
+itself. Its hardware code is tested in QEMU without Windows.
 
 `tests/ddk/hello.c` is a small driver that makes `\Device\ClangHello` and
 answers an IOCTL with a 64-bit computation and whether its `__except`

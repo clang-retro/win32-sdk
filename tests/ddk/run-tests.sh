@@ -6,8 +6,9 @@
 # is loaded, and a package of one with clanghello.inf gets a catalog. The
 # NT 4.0 build is checked as a WDM driver for Windows 98 and ME too
 # (check-imports.py --wdm), as is wdmaudio.c, a WDM audio driver (port
-# class) for 98, 98 SE and ME, and miniport.c is built as a SCSI miniport
-# for Windows 9x (check-imports.py --miniport).
+# class) for 98, 98 SE and ME, and so is drivers/hdaudio, and miniport.c
+# is built as a SCSI miniport for Windows 9x (check-imports.py
+# --miniport).
 #
 #   CFGDIR   folder with clang and the config files (a toolchain package's
 #            bin/), with the win32-sdk sysroots next to it in ../sysroots
@@ -175,6 +176,24 @@ if [ -f "$CFGDIR/nt4-ddk.cfg" ]; then
   else
     pass=$((pass + 1))
   fi
+fi
+# hdaudio.sys (drivers/hdaudio), the HD Audio driver for 98, 98 SE and
+# ME, at each level, checked to import only what their WDM and port class
+# have. drivers/hdaudio/test/run-tests.sh tests its hardware code in QEMU.
+hda=$here/../../drivers/hdaudio
+if [ -f "$CFGDIR/nt4-ddk.cfg" ] && [ -f "$hda/hdaudio.c" ]; then
+  for opt in O0 O2 Os; do
+    t=hdaudio-$opt
+    if ! "$CFGDIR/clang" --config="$CFGDIR/nt4-ddk.cfg" -march=i486 -$opt \
+         -Wall -Wextra -Werror "$hda/hda.c" "$hda/hdaudio.c" -lportcls \
+         -lksguid -o $t.sys >$t.log 2>&1; then
+      bad "$t build" $t.log; continue
+    fi
+    for v in 98 98se me; do
+      if ${PYTHON:-python3} "$check" --wdm $v $t.sys >$t-$v.chk 2>&1
+      then pass=$((pass + 1)); else bad "$t wdm $v" $t-$v.chk; fi
+    done
+  done
 fi
 # SCSI miniports for Windows 9x (win95-miniport.cfg): miniport.c at each
 # level, checked to import only what SCSIPORT.PDR has, as a native
