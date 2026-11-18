@@ -5,7 +5,8 @@
 # sends it an IOCTL. Each driver is test-signed (drvsign.py) before it
 # is loaded, and a package of one with clanghello.inf gets a catalog. The
 # NT 4.0 build is checked as a WDM driver for Windows 98 and ME too
-# (check-imports.py --wdm).
+# (check-imports.py --wdm), and miniport.c is built as a SCSI miniport for
+# Windows 9x (check-imports.py --miniport).
 #
 #   CFGDIR   folder with clang and the config files (a toolchain package's
 #            bin/), with the win32-sdk sysroots next to it in ../sysroots
@@ -144,6 +145,31 @@ if [ -f "$CFGDIR/nt4-ddk.cfg" ] && [ -f nt4-ddk-O2.sys ]; then
   else
     pass=$((pass + 1))
   fi
+fi
+# SCSI miniports for Windows 9x (win95-miniport.cfg): miniport.c at each
+# level, checked to import only what SCSIPORT.PDR has, as a native
+# subsystem 4.0 image, and the layouts of the miniport headers.
+if [ -f "$CFGDIR/win95-miniport.cfg" ]; then
+  for opt in O0 O2 Os; do
+    t=miniport-$opt
+    if ! "$CFGDIR/clang" --config="$CFGDIR/win95-miniport.cfg" -$opt -Wall \
+         -Wextra -Werror "$here/miniport.c" -o $t.mpd >$t.log 2>&1; then
+      bad "$t build" $t.log
+    elif ! ${PYTHON:-python3} "$check" --miniport $t.mpd >$t.chk 2>&1; then
+      bad "$t check-imports" $t.chk
+    else
+      pass=$((pass + 1))
+    fi
+  done
+  for l in "$here"/miniport-layout/*.c; do
+    t=layout-$(basename "$l" .c)
+    for cc in clang clang++; do
+      x=; [ $cc = clang++ ] && x="-x c++"
+      if "$CFGDIR/$cc" --config="$CFGDIR/win95-miniport.cfg" $x -Wall \
+           -Werror -Wsystem-headers -fsyntax-only "$l" >$t.log 2>&1
+      then pass=$((pass + 1)); else bad "$t $cc" $t.log; fi
+    done
+  done
 fi
 echo "ddk tests: $pass passed, $fail failed, $skip not run in Wine"
 [ $fail = 0 ]

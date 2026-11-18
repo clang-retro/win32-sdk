@@ -647,6 +647,46 @@ file or signature was changed. The test driver itself is signed in the
 tests, and still loads in Wine; real Windows in test mode is still to be
 tried.
 
+### SCSI miniports for Windows 95, 98 and ME
+
+Windows 9x drives SCSI host adapters (and many IDE and RAID ones) with the
+same kind of miniport as Windows NT. A 9x miniport is a `.mpd` file:
+
+* a PE image with the native subsystem, version 4.0;
+* with the entry point `DriverEntry`;
+* importing only `SCSIPORT.SYS`, which 9x's `SCSIPORT.PDR` provides.
+
+`SCSIPORT.PDR` has the structures of NT 3.51. Its `HW_INITIALIZATION_DATA`
+is 76 bytes and its `PORT_CONFIGURATION_INFORMATION` is 124. mingw-w64's
+DDK headers have Windows 2000's (80 and 140 bytes), which it refuses.
+`win95-miniport.cfg` uses 9x's headers instead:
+
+```sh
+clang --config=win95-miniport.cfg -O2 myadapter.c -o myadapter.mpd
+python3 share/clang-dos/check-imports.py --miniport myadapter.mpd
+```
+
+* `<miniport.h>`, `<srb.h>` and `<scsi.h>` (in
+  `sysroots/win9x-msvcrt/include/miniport9x`) have the 95, 98 and ME DDKs'
+  types, constants and structures, and the `ScsiPort*` prototypes. The
+  three DDKs agree on them. `tools/gen-vxd-headers.py --miniport` made
+  them from the DDKs' `block/inc`, as for the VxD headers, and
+  `tests/ddk/miniport-layout/*.c` checks their layouts.
+* Functions and callbacks are stdcall (`-mrtd`), as the DDK builds them
+  with `cl -Gz`. `ScsiPortNotification` and `ScsiDebugPrint` take variable
+  arguments, so they are cdecl.
+* `libscsiport9x.a` imports the 45 functions that `SCSIPORT.PDR` has
+  (`tools/scsiport9x-exports.txt`, from the 95 and 98 DDKs' import
+  libraries). `libvxd.a` has `memcpy`, `memset` and the like.
+* `check-imports.py --miniport` checks the subsystem and that each import
+  is one of those 45.
+
+`tests/ddk/miniport.c` is a virtual adapter with no hardware: its target
+0 answers INQUIRY as a processor device. `run-tests.sh` builds it at
+`-O0`, `-O2` and `-Os` and checks it. A miniport is installed with an INF
+for the SCSI adapter class, as the DDK's samples are. Nothing loads one
+in Wine, so real Windows 9x is the test.
+
 ### VxDs for Windows 3.1, 95, 98 and ME
 
 A VxD is a 32-bit virtual device driver in the LE format, run by the VMM

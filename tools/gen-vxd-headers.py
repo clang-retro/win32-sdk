@@ -39,6 +39,11 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 VXD = os.path.join(HERE, "..", "vxd")
 INCLUDE = os.path.join(VXD, "include")
+LAYOUT = os.path.join(VXD, "layout")
+GATE = "VXD_WINVER"     # what each declaration's #if tests
+PRELUDE = ["vxd.h", "vxdtypes.h"]  # what each header includes first
+PACKED = True           # the whole header is #pragma pack(1), as -Zp1
+EXTRA = []              # more flags for the DDK's compiler
 
 KITS = [("0x0400", "ms-w95-vxd"), ("0x040A", "ms-w98-vxd"),
         ("0x045A", "ms-me-vxd")]
@@ -140,6 +145,28 @@ spec("minivdd", [], """Display mini-VDDs: the VDD's function numbers
    (REGISTER_DISPLAY_DRIVER ...) and the structures of its
    callbacks.""")
 
+# --miniport: SCSI miniports (.MPD files), which are NT-style PE drivers
+# that import only SCSIPORT.SYS (SCSIPORT.PDR on Windows 9x). Their headers
+# are the DDKs' block/inc miniport.h, srb.h and scsi.h, whose structures
+# are those of Windows NT 3.51 (mingw-w64's are 2000's, with larger
+# HW_INITIALIZATION_DATA and PORT_CONFIGURATION_INFORMATION, which
+# SCSIPORT.PDR rejects). They are written to tests/../miniport/include.
+MINIPORT_SPECS = {
+    "miniport": (["miniport.h"], [], """The types of a SCSI miniport for
+   Windows 95, 98 and ME: the NT base types it uses (ULONG, BOOLEAN,
+   PHYSICAL_ADDRESS ...), INTERFACE_TYPE, the bus data structures (PCI,
+   EISA, MCA) ScsiPortGetBusData returns, and the access ranges."""),
+    "srb": (["srb.h"], ["miniport.h"], """The SCSI request block (SRB) and
+   what a miniport hands SCSIPORT: HW_INITIALIZATION_DATA, the
+   PORT_CONFIGURATION_INFORMATION it fills in, the SRB_* functions,
+   statuses and flags, and the ScsiPort* functions' notification types.
+   The functions are in SCSIPORT.SYS (-lscsiport); Windows 9x's
+   SCSIPORT.PDR has the 45 that tools/scsiport9x-exports.txt lists."""),
+    "scsi": (["scsi.h"], ["miniport.h", "srb.h"], """SCSI itself: the CDB
+   layouts, the SCSI operation codes (SCSIOP_*), sense data and inquiry
+   data."""),
+}
+
 KEYWORDS = set("""auto break case char const continue default do double else
 enum extern float for goto if inline int long register restrict return short
 signed sizeof static struct switch typedef union unsigned void volatile while
@@ -177,12 +204,16 @@ class Kit:
 
     def cmd(self, *args):
         return [self.clang, "--config=" + self.cfg, "-idirafter", self.tmp,
-                "-idirafter", self.block, "-ferror-limit=0", "-w"] + list(args)
+                "-idirafter", self.block, "-ferror-limit=0", "-w"] + EXTRA + \
+            list(args)
 
     def source(self, includes, extra=""):
         p = os.path.join(self.tmp, "t.c")
         with open(p, "w") as f:
-            f.write("#define WANTVXDWRAPS\n")
+            if PACKED:
+                f.write("#define WANTVXDWRAPS\n")
+            else:
+                f.write("\n")
             for h in includes:
                 f.write("#include <%s>\n" % h)
             f.write(extra)
@@ -397,6 +428,16 @@ class Decls:
                 return
             self.add("tag " + n["name"], "enum %s {\n%s};" % (
                 n["name"], self.enumbody(vals)), (), n)
+        elif k == "FunctionDecl" and not PACKED:
+            # A prototype (types only, no parameter names); not an inline
+            # function.
+            if n.get("isImplicit") or n.get("storageClass") == "static" or \
+                    any(c.get("kind") == "CompoundStmt"
+                        for c in n.get("inner", [])):
+                return
+            t = self.fix(n["type"]["qualType"])
+            self.add("func " + n["name"], declarator(t, n["name"]) + ";",
+                     ident_tokens(t), n)
         elif k == "TypedefDecl":
             if n.get("isImplicit"):
                 return
@@ -615,6 +656,8 @@ def layout_values(kit, includes, records):
     for name, fields in records.items():
         keys.append((name, None))
         exprs.append("sizeof(%s)" % name)
+        keys.append((name, "__alignof"))
+        exprs.append("__alignof(%s)" % name)
         for f in fields:
             keys.append((name, f))
             exprs.append("__builtin_offsetof(%s, %s)" % (name, f))
@@ -627,17 +670,38 @@ def layout_values(kit, includes, records):
 def main():
     if len(sys.argv) < 2:
         sys.exit(__doc__)
+    global SPECS, BASE, INCLUDE, LAYOUT, GATE, KITS, PRELUDE, PACKED, EXTRA
     args = sys.argv[1:]
     roots = None
-    if args[:1] == ["--kits"]:
-        roots, args = args[1], args[2:]
+    miniport = False
+    while args[:1] in (["--kits"], ["--miniport"]):
+        if args[0] == "--kits":
+            roots, args = args[1], args[2:]
+        else:
+            miniport, args = True, args[1:]
+    if miniport:
+        SPECS = MINIPORT_SPECS
+        BASE = []
+        top = os.path.join(HERE, "..", "miniport")
+        INCLUDE = os.path.join(top, "include")
+        LAYOUT = os.path.join(HERE, "..", "tests", "ddk", "miniport-layout")
+        GATE = "_WIN32_WINDOWS"
+        KITS = [("0x0400", "ms-w95-vxd"), ("0x0410", "ms-w98-vxd"),
+                ("0x0490", "ms-me-vxd")]
+        PRELUDE = []
+        PACKED = False
+        # Natural alignment, as cl's default, and scsi.h without
+        # basedef.h's types (miniport.h has them).
+        # -mrtd: stdcall, as the DDK builds them (cl -Gz); DBG, as its
+        # samples do, for ScsiDebugPrint.
+        EXTRA = ["-fpack-struct=8", "-D_NTDEF_", "-mrtd", "-DDBG=1"]
     cfgdir = args[0]
     want = args[1:] or list(SPECS)
     kits = [(v, Kit(cfgdir, c, roots)) for v, c in KITS]
     owner = {}      # name -> header that declares it
     base = {}       # name -> (gate, text, deps)
     base_order = []
-    for n in ours(cfgdir):
+    for n in ours(cfgdir) if PACKED else ():
         owner[n] = "vxd"
     last = max(list(SPECS).index(w) for w in want)
     for name in list(SPECS)[:last + 1]:
@@ -668,7 +732,11 @@ def main():
                     owner.setdefault(n, name)
             continue
         write(name, intro, per, files, owner, base, base_order)
-    write_base(base, base_order)
+    if PACKED:
+        write_base(base, base_order)
+    elif base:
+        sys.exit("declarations from outside the headers: " +
+                 ", ".join(base_order))
 
 
 def ours(cfgdir):
@@ -748,6 +816,15 @@ def write(name, intro, per, files, owner, base, base_order):
                     base_order.append(dn)
                 emitted.add(dn)
 
+    lay = ([p[4] for p in per if p[0] == KITS[1][0]] or [None])[0]
+    aligns = {r: v for (r, f), v in lay or [] if f == "__alignof"}
+
+    def align(tag):
+        for k in ("struct ", "union "):
+            if k + tag in aligns:
+                return aligns[k + tag]
+        return 8
+
     out_decls = []
     for key in order:
         v = seen[key]
@@ -764,6 +841,11 @@ def write(name, intro, per, files, owner, base, base_order):
         emitted.add(nm)
         owner.setdefault(nm, name)
         out_decls.append(versioned(v["by"], gates, lambda t: t))
+        if not PACKED and key.startswith("tag ") and align(key[4:]) < 4:
+            # Under #pragma pack in the DDK.
+            g, text = out_decls[-1]
+            out_decls[-1] = (g, "#pragma pack(push, %d)\n%s\n#pragma pack(pop)"
+                             % (align(key[4:]), text))
     # Constants.
     consts = {}
     corder = []
@@ -777,6 +859,8 @@ def write(name, intro, per, files, owner, base, base_order):
                 continue
             if STRING.match(b) or CHAR.match(b):
                 text = b
+            elif n == "NULL" and re.fullmatch(r"\(\s*\(\s*void\s*\*\s*\)\s*0\s*\)|0", b):
+                text = "((void *)0)"
             elif n in vals:
                 text = literal(b, *vals[n])
             else:
@@ -789,39 +873,53 @@ def write(name, intro, per, files, owner, base, base_order):
     for n in corder:
         owner.setdefault(n, name)
     # Header.
-    guard = "VXD_%s_H" % name.upper()
+    guard = "%s_%s_H" % ("VXD" if PACKED else "MINIPORT9X", name.upper())
     h = ["/* %s.h: %s\n\n   Made by tools/gen-vxd-headers.py from the names, "
          "values and layouts\n   in the 95, 98 and ME DDKs; each "
-         "declaration is under the first\n   VXD_WINVER whose DDK has it. "
-         "*/\n" % (name, intro),
-         "#ifndef %s\n#define %s\n\n#include <vxd.h>\n#include <vxdtypes.h>\n"
-         % (guard, guard)]
-    for i in sorted(includes):
+         "declaration is under the first\n   %s whose DDK has it. "
+         "*/\n" % (name, intro, GATE),
+         "#ifndef %s\n#define %s\n\n" % (guard, guard)]
+    for i in PRELUDE:
+        h.append("#include <%s>\n" % i)
+    incs = {i.replace(".h", "") for i in includes}
+    if not PACKED:
+        incs |= {i.replace(".h", "") for i in SPECS[name][1]}
+    for i in sorted(incs):
         h.append("#include <%s.h>\n" % i)
-    h.append("\n#pragma pack(push, 1)\n")
+    if PACKED:
+        h.append("\n#pragma pack(push, 1)\n")
     body = []
     for n in corder:
         body.append(versioned(consts[n], gates,
-                              lambda t, n=n: "#define %s %s" % (n, t)))
+                              lambda t, n=n: ("#ifndef NULL\n#define NULL %s\n#endif"
+                                              % t) if n == "NULL" else
+                              "#define %s %s" % (n, t)))
     body += out_decls
     h.append(gated(body, gates[0]))
-    h.append("\n#pragma pack(pop)\n\n#endif\n")
+    h.append("\n#pragma pack(pop)\n" if PACKED else "")
+    h.append("\n#endif\n")
+    os.makedirs(INCLUDE, exist_ok=True)
     with open(os.path.join(INCLUDE, name + ".h"), "w") as f:
         f.write("".join(h))
     # Layout test, from the 98 DDK.
-    lay = ([p[4] for p in per if p[0] == KITS[1][0]] or [None])[0]
     t = ["/* Made by tools/gen-vxd-headers.py: the layouts of <%s.h> as the "
          "98 DDK's\n   compiler laid them out. */\n" % name,
-         "#define VXD_WINVER 0x040A\n#include <%s.h>\n#include <stddef.h>\n"
+         "#define %s %s\n#include <%s.h>\n#include <stddef.h>\n"
          "#ifdef __cplusplus\n#define A(e) static_assert(e, #e);\n#else\n"
-         "#define A(e) _Static_assert(e, #e);\n#endif\n" % name]
+         "#define A(e) _Static_assert(e, #e);\n#endif\n"
+         % (GATE, KITS[1][0], name)]
     for (rec, field), v in lay or []:
         if field is None:
             t.append("A(sizeof(%s) == %d)\n" % (rec, v))
+        elif field == "__alignof":
+            # Under -Zp1 every VxD record's is 1, and vxd.h's own (DIOCParams,
+            # VPICD_IRQ_Descriptor) are natural, as their offsets allow.
+            if not PACKED:
+                t.append("A(__alignof__(%s) == %d)\n" % (rec, v))
         else:
             t.append("A(offsetof(%s, %s) == %d)\n" % (rec, field, v))
-    os.makedirs(os.path.join(VXD, "layout"), exist_ok=True)
-    with open(os.path.join(VXD, "layout", name + ".c"), "w") as f:
+    os.makedirs(LAYOUT, exist_ok=True)
+    with open(os.path.join(LAYOUT, name + ".c"), "w") as f:
         f.write("".join(t))
     print("%s.h: %d constants, %d declarations, %d layout checks; "
           "errors per DDK %s" % (name, len(corder), len(out_decls),
@@ -843,9 +941,9 @@ def versioned(by_gate, gates, fmt):
     for i, (g, t) in enumerate(reversed(texts)):
         last = i == len(texts) - 1
         if i == 0:
-            out.append("#if VXD_WINVER >= %s" % g)
+            out.append("#if %s >= %s" % (GATE, g))
         elif not last or g != gates[0]:
-            out.append("#elif VXD_WINVER >= %s" % g)
+            out.append("#elif %s >= %s" % (GATE, g))
         else:
             out.append("#else")
         out.append(fmt(t))
@@ -864,7 +962,7 @@ def gated(body, baseline=KITS[0][0]):
             if cur:
                 out.append("#endif\n")
             if g:
-                out.append("#if VXD_WINVER >= %s\n" % g)
+                out.append("#if %s >= %s\n" % (GATE, g))
             cur = g
         out.append(text + "\n")
     if cur:
