@@ -1,7 +1,11 @@
 #!/bin/sh
 # Add the VxD support to a Windows 9x sysroot (build-win9x.sh's):
 #   $SYSROOT/include/vxd.h     the DDB, control messages, VMM calls
-#   $SYSROOT/include/vcomm.h   what a VCOMM port driver hands to VCOMM
+#   $SYSROOT/include/vxd/      the subsystems' headers: vcomm.h (what a
+#                              VCOMM port driver hands to VCOMM) and those
+#                              tools/gen-vxd-headers.py made (configmg.h,
+#                              ifs.h, ios.h, ndis.h ...), which
+#                              win95-vxd.cfg adds to the include path
 #   $SYSROOT/include/vxdsvc.h  the services' numbers (tools/vxd-services.txt)
 #   $SYSROOT/lib/libvxd.a      memcpy, memset and the like for VxDs, the
 #                              Microsoft target's 64-bit division helpers,
@@ -15,8 +19,9 @@ set -e
 : "${BIN:?set BIN}" "${SYSROOT:?set SYSROOT}"
 here=$(cd "$(dirname "$0")/.." && pwd)
 WORK=${WORK:-$PWD/build-vxd}
-mkdir -p "$WORK" "$SYSROOT/include" "$SYSROOT/lib"
-cp "$here/vxd/vxd.h" "$here/vxd/vcomm.h" "$SYSROOT/include/"
+mkdir -p "$WORK" "$SYSROOT/include/vxd" "$SYSROOT/lib"
+cp "$here/vxd/vxd.h" "$SYSROOT/include/"
+cp "$here/vxd/vcomm.h" "$here"/vxd/include/*.h "$SYSROOT/include/vxd/"
 rm -rf "$WORK/stubs"
 python3 "$here/tools/gen-vxd-wraps.py" --header "$SYSROOT/include/vxdsvc.h" \
   --stubs "$WORK/stubs"
