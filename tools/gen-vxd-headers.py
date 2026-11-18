@@ -182,6 +182,22 @@ WDM_SPECS = {
    in IOCTL_1394_CLASS requests, the REQUEST_* functions, address ranges,
    isochronous resources, and the bus and node structures. Windows 98,
    98 SE and ME (1394BUS.SYS) and 2000 and later take the same IRBs."""),
+    "dvp": (["dvp.h"], ["windef.h", "wingdi.h", "ddraw.h"],
+            """DirectDraw video ports
+   (VPE): the video port descriptions, connections and capabilities that
+   <ddrawint.h>'s video port callbacks take."""),
+    "ddrawint": (["ddrawint.h"], ["windef.h", "wingdi.h", "ddraw.h", "dvp.h"],
+                 """The DirectDraw HAL of an NT
+   display driver (<winddi.h> includes it): DD_HALINFO and the callback
+   tables DrvGetDirectDrawInfo and DrvEnableDirectDraw fill in, the
+   DD_*_GLOBAL and DD_*_LOCAL objects and the DD_*DATA each callback
+   gets."""),
+    "d3dnthal": (["d3dnthal.h"],
+                 ["windef.h", "wingdi.h", "ddraw.h", "dvp.h", "ddrawint.h",
+                  "d3dtypes.h", "d3dcaps.h"], """The Direct3D HAL of
+   an NT display driver (<winddi.h> includes it): D3DNTHAL_GLOBALDRIVERDATA,
+   the D3DNTHAL_CALLBACKS tables and the D3DNTHAL_*DATA each callback
+   gets, and the DirectX 6 and later command buffer (D3DNTHAL_DP2*)."""),
 }
 
 KEYWORDS = set("""auto break case char const continue default do double else
@@ -734,7 +750,9 @@ def main():
     # mingw-w64's own headers that the WDM ones include first.
     pres = []
     for _, pre, _ in SPECS.values():
-        pres += [p for p in pre if p not in pres]
+        pres += [p for p in pre if p not in pres and
+                 p.lower() not in {f.lower() for v in SPECS.values()
+                                   for f in v[0]}]
     for n in ours(cfgdir) if PACKED else \
             ours(cfgdir, "nt4-ddk", pres) if wdm else ():
         owner[n] = "vxd"

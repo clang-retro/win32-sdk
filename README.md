@@ -577,11 +577,13 @@ drivers for it.
 `scripts/fix-ddk-headers.sh` fixes a mistake in mingw-w64's `wdm.h`
 (it tests `NTDDI_WINVISTA`, which nothing defines, so drivers for 2000
 and XP got Vista's IRP layout), adds `STREAMAPI` to four `<strmini.h>`
-functions that lack it, makes `<ndis.h>` compile next to `<ntddndis.h>`
+functions that lack it, makes `<ks.h>`'s callbacks `NTAPI` (KS.SYS calls
+them stdcall, as the DDK builds them with `cl -Gz`; mingw-w64 left them
+cdecl), makes `<ndis.h>` compile next to `<ntddndis.h>`
 and adds a comma its `NdisMWanIndicateReceiveComplete` lacks. It also
 copies in the DDK headers mingw-w64 lacks, from `kernel/include`
 (`share/clang-dos/ddk-include` in the package): `<hidport.h>`, `<1394.h>`,
-`<ddrawint.h>` and `<d3dnthal.h>`. `build-win9x.sh` and
+`<ddrawint.h>`, `<d3dnthal.h>` and `<dvp.h>`. `build-win9x.sh` and
 `build-modern-sysroot.sh` run it on each sysroot.
 
 Drivers for Windows 95, 98 and ME are mostly VxDs (LE files, below), not
@@ -666,6 +668,17 @@ functions in 98 and 98 SE, and ME's adds
 warn that they do not check it rather than fail. `tests/ddk/streammini.c`
 registers a minidriver with `StreamClassRegisterAdapter`.
 
+AVStream minidrivers (`<ks.h>`, `-lks`, `KsInitializeDriver` with a
+device descriptor) load on 98 Second Edition and ME, whose KS.SYS
+brought AVStream; 98's does not have it. ME's KS.SYS added the stream
+pointer functions (`KsPinGetLeadingEdgeStreamPointer`,
+`KsStreamPointerAdvanceOffsetsAndUnlock` and the rest), so a pin-centric
+minidriver that uses them loads only on ME; `--wdm 98se` says which.
+mingw-w64's `<ks.h>` has the same layouts as the XP DDK's for the
+AVStream structures (descriptors, dispatch tables, `KSPIN`, `KSFILTER`,
+`KSDEVICE`, stream pointers). `tests/ddk/avstream.c` is a capture
+filter with one pin-centric output pin.
+
 NDIS 5 miniports (network adapters, `<ndis.h>` with `NDIS50_MINIPORT`,
 `-lndis`) are `.sys` files that 98 SE and ME load. 98 SE's NDIS.VXD
 resolves their imports from a table of 277 names in NDIS.VXD itself, not
@@ -679,9 +692,15 @@ Display drivers for NT 4.0 and later are DLLs that import WIN32K.SYS
 (GDI's engine, `<winddi.h>`, `-lwin32k`), with `DrvEnableDriver` as
 their entry point. `check-imports.py --nt` checks their imports against
 NT 4.0's, 2000's and XP's WIN32K.SYS (`EngAlphaBlend` and the rest of
-2000's are not in 4.0's). `<ddrawint.h>`, which `<winddi.h>` needs and
-mingw-w64 lacks, is a stub here that declares its DirectDraw types
-without their members:
+2000's are not in 4.0's). mingw-w64's `<winddi.h>` includes
+`<ddrawint.h>` and `<d3dnthal.h>`, the DirectDraw and Direct3D HAL that
+`DrvGetDirectDrawInfo` and `DrvEnableDirectDraw` fill in (`DD_HALINFO`,
+`DD_CALLBACKS`, `D3DNTHAL_GLOBALDRIVERDATA`, the `DD_*DATA` each callback
+gets, the DirectX 6 and later command buffer), and `<dvp.h>`, video
+ports, which mingw-w64 lacks. `gen-vxd-headers.py --wdm` made the three
+from the 2000 and XP DDKs, and `tests/ddk/wdm-layout/` checks their
+layouts; what only XP's has (DirectX 8 and 9) is under
+`_WIN32_WINNT >= 0x0501`:
 
 ```sh
 clang --config=nt4-ddk.cfg -O2 -shared -Wl,--entry,_DrvEnableDriver@12 \
@@ -689,7 +708,8 @@ clang --config=nt4-ddk.cfg -O2 -shared -Wl,--entry,_DrvEnableDriver@12 \
 python3 share/clang-dos/check-imports.py --nt 4.0 mydisp.dll
 ```
 
-`tests/ddk/display.c` implements `DrvBitBlt` with `EngBitBlt`.
+`tests/ddk/display.c` implements `DrvBitBlt` with `EngBitBlt` and has a
+DirectDraw and Direct3D HAL with one callback, `WaitForVerticalBlank`.
 
 `tools/mapsym.py` writes a `.SYM` file (MAPSYM's format), which WDEB386
 and SoftICE load. For a driver, it reads the symbols from the image's
@@ -704,6 +724,28 @@ clang --config=nt4-ddk.cfg -O2 -g myusb.c -lusbd9x -o myusb.sys
 python3 share/clang-dos/mapsym.py myusb.sys      # writes myusb.sym
 python3 share/clang-dos/mapsym.py --dump --lines myusb.sym
 ```
+
+For WinDbg (and KD) on NT 4.0 and later, build with `-g -gcodeview` and
+have the linker write a PDB with `-Wl,--pdb=`. Add
+`-Wl,--Xlink=-pdbaltpath:%_PDB%` so that the image's debug directory
+names only the PDB, not the folder it was built in, and WinDbg finds it
+on its symbol path (`.sympath`) next to the driver. The PDB has the
+functions, their types, line numbers and the frame data that WinDbg
+needs to walk the stack through code built without frame pointers.
+`llvm-symbolizer --obj=mydrv.sys --pdb=mydrv.pdb ADDRESS` reads it the
+same way:
+
+```sh
+clang --config=winxp-ddk.cfg -O2 -g -gcodeview mydrv.c -o mydrv.sys \
+  -Wl,--pdb=mydrv.pdb -Wl,--Xlink=-pdbaltpath:%_PDB%
+```
+
+The PDB is version 7.0, which WinDbg 6 and later read; NT 4.0's own
+4.0 debuggers read only `.DBG` files and older PDBs, but WinDbg 6 debugs
+NT 4.0 targets. With `--pdb`, the linker leaves out the COFF symbol table
+and the DWARF that `mapsym.py` reads; to have both a PDB and a `.SYM`
+file from one build, add `-gdwarf` and
+`-Wl,--Xlink=-debug:symtab -Wl,--Xlink=-debug:dwarf`.
 
 `tests/ddk/hello.c` is a small driver that makes `\Device\ClangHello` and
 answers an IOCTL with a 64-bit computation and whether its `__except`

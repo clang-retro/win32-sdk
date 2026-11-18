@@ -9,8 +9,10 @@
 # class) for 98, 98 SE and ME, usbdrv.c (USB, -lusbd9x, and its .SYM
 # file, with line numbers with -g), hidparse.c (HID report parsing),
 # hidmini.c (a HID minidriver), fw1394.c (a 1394 client), streammini.c
-# (stream class) and ndismini.c (NDIS 5); display.c is built as an NT
-# display driver (win32k.sys, check-imports.py --nt), and miniport.c is
+# (stream class), avstream.c (AVStream) and ndismini.c (NDIS 5);
+# display.c is built as an NT display driver with a DirectDraw and
+# Direct3D HAL (win32k.sys, check-imports.py --nt); hello.c is built with
+# a PDB for WinDbg (llvm-symbolizer reads it); and miniport.c is
 # built as a SCSI miniport for Windows 9x (check-imports.py --miniport).
 #
 #   CFGDIR   folder with clang and the config files (a toolchain package's
@@ -185,7 +187,9 @@ fi
 # also with -DSE_ONLY, which only 98 SE and ME can load; hidmini.c, a HID
 # minidriver (<hidport.h>, -lhidclass); fw1394.c, a 1394 client (<1394.h>);
 # streammini.c, a stream class minidriver (-lstream), also with -DME_ONLY,
-# which only ME can load; and ndismini.c, an NDIS 5 miniport (-lndis),
+# which only ME can load; avstream.c, an AVStream minidriver (-lks),
+# which 98 SE and ME can load, also with -DME_ONLY (ME's stream
+# pointers); and ndismini.c, an NDIS 5 miniport (-lndis),
 # checked against 98 SE's NDIS.VXD (98 and ME have no list, so they only
 # warn), also with -DXP_ONLY, which 98 SE cannot load.
 wdm_check() { # NAME FILE.sys VERSIONS-THAT-LOAD-IT VERSIONS-THAT-DO-NOT
@@ -206,7 +210,8 @@ if [ -f "$CFGDIR/nt4-ddk.cfg" ]; then
            hidmini:-lhidclass:"98 98se me": fw1394::"98 98se me": \
            streammini:-lstream:"98 98se me": \
            "streammini-me:-lstream -DME_ONLY:me:98 98se" \
-           ndismini:-lndis:"98 98se me": "ndismini-xp:-lndis -DXP_ONLY::98se"; do
+           ndismini:-lndis:"98 98se me": "ndismini-xp:-lndis -DXP_ONLY::98se" \
+           avstream:-lks:"98se me":98 "avstream-me:-lks -DME_ONLY:me:98 98se"; do
     n=${t%%:*} r=${t#*:}
     args=${r%%:*} r=${r#*:}
     yes=${r%%:*} no=${r#*:}
@@ -253,9 +258,10 @@ if [ -f "$CFGDIR/nt4-ddk.cfg" ]; then
   fi
 fi
 # A display driver (display.c, win32k.sys's DDI) for NT 4.0 and later,
-# also with -DNT5_ONLY (EngAlphaBlend), which NT 4.0 cannot load; and the
-# layouts of the generated WDM headers (hidport.h, 1394.h) against the
-# 2000 and XP DDKs.
+# with a DirectDraw and Direct3D HAL, also with -DNT5_ONLY (EngAlphaBlend),
+# which NT 4.0 cannot load; and the layouts of the generated headers
+# (hidport.h, 1394.h, dvp.h, ddrawint.h, d3dnthal.h) against the 2000 and
+# XP DDKs.
 if [ -f "$CFGDIR/nt4-ddk.cfg" ]; then
   for t in display::"4.0 5.0": "display-nt5:-DNT5_ONLY:5.0:4.0"; do
     n=${t%%:*} r=${t#*:}
@@ -287,6 +293,32 @@ if [ -f "$CFGDIR/nt4-ddk.cfg" ]; then
     done
   done
 fi
+# WinDbg symbols: with -g -gcodeview and --pdb, lld writes a PDB, and
+# the image's debug directory names it (only its name, with
+# -pdbaltpath:%_PDB%, so that WinDbg looks for it on its symbol path).
+# llvm-symbolizer reads the PDB to find the entry point's function and
+# source line, as WinDbg would.
+for c in nt4-ddk win10-x64-ddk; do
+  [ -f "$CFGDIR/$c.cfg" ] || continue
+  t=pdb-$c
+  if "$CFGDIR/clang" --config="$CFGDIR/$c.cfg" -O2 -g -gcodeview \
+       "$here/hello.c" -o $t.sys -Wl,--pdb=$t.pdb \
+       -Wl,--Xlink=-pdbaltpath:%_PDB% >$t.log 2>&1 &&
+     "$CFGDIR/llvm-readobj" --file-headers --coff-debug-directory $t.sys \
+       >>$t.log 2>&1 &&
+     grep -q "PDBFileName: $t.pdb\$" $t.log &&
+     base=$(awk '/ImageBase:/ {print $2; exit}' $t.log) &&
+     entry=$(awk '/AddressOfEntryPoint:/ {print $2; exit}' $t.log) &&
+     "$CFGDIR/llvm-symbolizer" --obj=$t.sys --pdb=$t.pdb \
+       $(printf '0x%x' $((base + entry))) >$t.sym 2>&1 &&
+     cat $t.sym >>$t.log &&
+     sed -n 1p $t.sym | grep -q "^DriverEntry$" &&
+     sed -n 2p $t.sym | grep -q "hello\.c:[1-9]"; then
+    pass=$((pass + 1))
+  else
+    bad "$t" $t.log
+  fi
+done
 # SCSI miniports for Windows 9x (win95-miniport.cfg): miniport.c at each
 # level, checked to import only what SCSIPORT.PDR has, as a native
 # subsystem 4.0 image, and the layouts of the miniport headers.

@@ -17,15 +17,21 @@
 #   without STREAMAPI, so a minidriver would import _Name, which no
 #   import library has, instead of _Name@N.
 #
+#   ks.h (in include) declares its callbacks (AVStream's dispatch
+#   tables, intersect handlers, allocators ...) without a calling
+#   convention, so they are cdecl; KS.SYS calls them stdcall, as the DDK
+#   builds them (cl -Gz). They get NTAPI.
+#
 #   ndis.h (NDIS miniports) defines NDIS_REQUEST_TYPE again after the
 #   ntddndis.h it includes, and misses a comma in
 #   NdisMWanIndicateReceiveComplete's parameters, so it does not compile.
 #
 # It also adds the DDK headers mingw-w64 lacks, from kernel/include (in a
 # package, ddk-include next to this script): hidport.h (HID minidrivers)
-# and 1394.h (IEEE 1394 client drivers), which gen-vxd-headers.py --wdm
-# made from the 2000 and XP DDKs, and ddrawint.h and d3dnthal.h, which
-# mingw-w64's winddi.h (display drivers) includes.
+# and 1394.h (IEEE 1394 client drivers), and the DirectDraw and Direct3D
+# HAL of display drivers that mingw-w64's winddi.h includes, ddrawint.h,
+# d3dnthal.h and dvp.h, all of which gen-vxd-headers.py --wdm made from
+# the 2000 and XP DDKs.
 #
 #   fix-ddk-headers.sh SYSROOT
 set -e
@@ -42,6 +48,14 @@ if [ -f "$ks" ] && ! grep -q 'ifdef _NTDDK_ /\* fix-ddk-headers' "$ks"; then
          print "  CHAR VolumeName[40];"; print "#else"; print; print "#endif"
          next } { print }' "$ks" > "$ks.new"
   mv "$ks.new" "$ks"
+fi
+# ks.h's callbacks (AVStream's dispatch tables, intersect handlers ...):
+# the DDK builds with cl -Gz, so KS.SYS calls them stdcall.
+kh=$inc/../ks.h
+if [ -f "$kh" ]; then
+  sed 's/^typedef \([A-Za-z_][A-Za-z_0-9]*\) (\*PFN/typedef \1 (NTAPI *PFN/' \
+    "$kh" > "$kh.new"
+  mv "$kh.new" "$kh"
 fi
 sm=$inc/strmini.h
 if [ -f "$sm" ]; then
