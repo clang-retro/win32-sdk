@@ -1,0 +1,199 @@
+/* minivdd.h: Display mini-VDDs: the VDD's function numbers
+   (REGISTER_DISPLAY_DRIVER ...) and the structures of its
+   callbacks.
+
+   Made by tools/gen-vxd-headers.py from the names, values and layouts
+   in the 95, 98 and ME DDKs; each declaration is under the first
+   VXD_WINVER whose DDK has it. */
+#ifndef VXD_MINIVDD_H
+#define VXD_MINIVDD_H
+
+#include <vxd.h>
+#include <vxdtypes.h>
+
+#pragma pack(push, 1)
+#define VDD_VerNum 0x0400
+#define VDD_MinVerNum 0x030A
+#define fVidTxtEmulate 0x01
+#define fVidNoTrpTxt 0x02
+#define fVidNoTrpLRGrfx 0x04
+#define fVidNoTrpHRGrfx 0x08
+#define fVidTextMd 0x10
+#define fVidLowRsGrfxMd 0x20
+#define fVidHghRsGrfxMd 0x40
+#define fVidRetainAllo 0x80
+#define REGISTER_DISPLAY_DRIVER 0
+#define GET_VDD_BANK 1
+#define SET_VDD_BANK 2
+#define RESET_BANK 3
+#define PRE_HIRES_TO_VGA 4
+#define POST_HIRES_TO_VGA 5
+#define PRE_VGA_TO_HIRES 6
+#define POST_VGA_TO_HIRES 7
+#define SAVE_REGISTERS 8
+#define RESTORE_REGISTERS 9
+#define MODIFY_REGISTER_STATE 10
+#define ACCESS_VGA_MEMORY_MODE 11
+#define ACCESS_LINEAR_MEMORY_MODE 12
+#define ENABLE_TRAPS 13
+#define DISABLE_TRAPS 14
+#define MAKE_HARDWARE_NOT_BUSY 15
+#define VIRTUALIZE_CRTC_IN 16
+#define VIRTUALIZE_CRTC_OUT 17
+#define VIRTUALIZE_SEQUENCER_IN 18
+#define VIRTUALIZE_SEQUENCER_OUT 19
+#define VIRTUALIZE_GCR_IN 20
+#define VIRTUALIZE_GCR_OUT 21
+#define SET_LATCH_BANK 22
+#define RESET_LATCH_BANK 23
+#define SAVE_LATCHES 24
+#define RESTORE_LATCHES 25
+#define DISPLAY_DRIVER_DISABLING 26
+#define SELECT_PLANE 27
+#define PRE_CRTC_MODE_CHANGE 28
+#define POST_CRTC_MODE_CHANGE 29
+#define VIRTUALIZE_DAC_OUT 30
+#define VIRTUALIZE_DAC_IN 31
+#define GET_CURRENT_BANK_WRITE 32
+#define GET_CURRENT_BANK_READ 33
+#define SET_BANK 34
+#define CHECK_HIRES_MODE 35
+#define GET_TOTAL_VRAM_SIZE 36
+#define GET_BANK_SIZE 37
+#define SET_HIRES_MODE 38
+#define PRE_HIRES_SAVE_RESTORE 39
+#define POST_HIRES_SAVE_RESTORE 40
+#define VESA_SUPPORT 41
+#define GET_CHIP_ID 42
+#define CHECK_SCREEN_SWITCH_OK 43
+#define VIRTUALIZE_BLTER_IO 44
+#define SAVE_MESSAGE_MODE_STATE 45
+#define SAVE_FORCED_PLANAR_STATE 46
+#define VESA_CALL_POST_PROCESSING 47
+#define PRE_INT_10_MODE_SET 48
+#define NBR_MINI_VDD_FUNCTIONS_40 49
+#if VXD_WINVER >= 0x045A
+#define CM_POWERSTATE_HIBERNATE 0x10
+#endif
+#define GET_NUM_UNITS 49
+#define TURN_VGA_OFF 50
+#define TURN_VGA_ON 51
+#define SET_ADAPTER_POWER_STATE 52
+#define GET_ADAPTER_POWER_STATE_CAPS 53
+#define SET_MONITOR_POWER_STATE 54
+#define GET_MONITOR_POWER_STATE_CAPS 55
+#define GET_MONITOR_INFO 56
+#define I2C_OPEN 57
+#define I2C_ACCESS 58
+#define GPIO_OPEN 59
+#define GPIO_ACCESS 60
+#define COPYPROTECTION_ACCESS 61
+#define NBR_MINI_VDD_FUNCTIONS_41 62
+#define NBR_MINI_VDD_FUNCTIONS 0x31
+#define VDD_QUERY_VERSION 0
+#define MINIVDD_SVC_BASE_OFFSET 0x80
+#define VDD_DRIVER_REGISTER 0x80
+#define VDD_DRIVER_UNREGISTER 0x81
+#define VDD_SAVE_DRIVER_STATE 0x82
+#define VDD_REGISTER_DISPLAY_DRIVER_INFO 0x83
+#define VDD_REGISTER_SSB_FLAGS 0x84
+#define VDD_GET_DISPLAY_CONFIG 0x85
+#define VDD_PRE_MODE_CHANGE 0x86
+#define VDD_POST_MODE_CHANGE 0x87
+#define VDD_SET_USER_FLAGS 0x88
+#define VDD_SET_BUSY_FLAG_ADDR 0x89
+#define VDD_PC98_RESERVED 0x8A
+#define VDD_VBE_PM 0x8A
+#define VDD_ENABLE 0x8B
+#define VDD_GETMEMBASE 0x8C
+#define VDD_OPEN 0x8D
+#define VDD_CLOSE 0x8E
+#define VDD_OPEN_KEY 0x8F
+#define VDD_SET_POWER_STATE 0x90
+#define VDD_GET_POWER_STATE_CAPS 0x91
+#define VDD_GET_DISPLAY_CONFIG2 0x8085
+#define ENABLE_IO 0x01
+#define ENABLE_MEM 0x02
+#define ENABLE_VGA 0x30
+#define ENABLE_ROM 0x80
+#define ENABLE_ALL 0xFF
+#define ENABLE_NONE 0x00
+#define ENABLE_VALID 0xFF
+#define ENABLE_ERROR 0xFFFFFFFF
+#define VDD_OPEN_EXIST 0x01
+#define VDD_OPEN_ENUM 0x02
+#define VDD_OPEN_LOCK 0x00
+#define VDD_OPEN_TEST 0x01
+#define VDD_OPEN_KEY_WRITE 0x01
+#define VDD_OPEN_KEY_READ 0x02
+#define VDD_OPEN_KEY_USER 0x10
+#define VDD_OPEN_KEY_GLOBAL 0x20
+#define VDD_IOCTL_SET_NOTIFY 0x10000001
+#define VDD_IOCTL_GET_DDHAL 0x10000002
+#define VDD_IOCTL_COPY_PROTECTION 0x10000003
+#define VDD_IOCTL_I2C_OPEN 0x10000004
+#define VDD_IOCTL_I2C_ACCESS 0x10000005
+#define VDD_NOTIFY_START_MODE_CHANGE 0x01
+#define VDD_NOTIFY_END_MODE_CHANGE 0x02
+#define VDD_NOTIFY_ENABLE 0x04
+#define VDD_NOTIFY_DISABLE 0x08
+#define VDD_NOTIFY_TYPE_CALLBACK 1
+#define BYTE_LENGTHED 1
+#define WORD_LENGTHED 2
+#define GOING_TO_WINDOWS_MODE 1
+#define GOING_TO_VGA_MODE 2
+#define DISPLAY_DRIVER_DISABLED 4
+#define IN_WINDOWS_HIRES_MODE 8
+#if VXD_WINVER >= 0x045A
+#define BLOCK_INT10 16
+#endif
+#define RETURNED_DATA_IS_STALE 0x01
+#define MINIVDD_FAILED_TO_LOAD 0x02
+#define MINIVDD_CHIP_ID_DIDNT_MATCH 0x04
+#define REGISTRY_BPP_NOT_VALID 0x08
+#define REGISTRY_RESOLUTION_NOT_VALID 0x10
+#define REGISTRY_DPI_NOT_VALID 0x20
+#define MONITOR_DEVNODE_NOT_ACTIVE 0x40
+#define MONITOR_INFO_NOT_VALID 0x80
+#define MONITOR_INFO_DISABLED_BY_USER 0x0100
+#define REFRESH_RATE_MAX_ONLY 0x0200
+#define CARD_VDD_LOADED_OK 0x0400
+#define DEVICE_IS_NOT_VGA 0x0800
+struct tagVDD_IOCTL_SET_NOTIFY_INPUT {
+  DWORD NotifyMask;
+  DWORD NotifyType;
+  DWORD NotifyProc;
+  DWORD NotifyData;
+};
+typedef struct tagVDD_IOCTL_SET_NOTIFY_INPUT VDD_IOCTL_SET_NOTIFY_INPUT;
+struct DISPLAYINFO {
+  WORD diHdrSize;
+  WORD diInfoFlags;
+  DWORD diDevNodeHandle;
+  char diDriverName[16];
+  WORD diXRes;
+  WORD diYRes;
+  WORD diDPI;
+  BYTE diPlanes;
+  BYTE diBpp;
+  WORD diRefreshRateMax;
+  WORD diRefreshRateMin;
+  WORD diLowHorz;
+  WORD diHighHorz;
+  WORD diLowVert;
+  WORD diHighVert;
+  DWORD diMonitorDevNodeHandle;
+  BYTE diHorzSyncPolarity;
+  BYTE diVertSyncPolarity;
+  DWORD diUnitNumber;
+  DWORD diDisplayFlags;
+  DWORD diXDesktopPos;
+  DWORD diYDesktopPos;
+  DWORD diXDesktopSize;
+  DWORD diYDesktopSize;
+};
+typedef struct DISPLAYINFO DISPLAYINFO;
+
+#pragma pack(pop)
+
+#endif

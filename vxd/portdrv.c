@@ -43,7 +43,7 @@ static int set_state(PortData *p, _DCB *dcb, DWORD action) {
   struct loop *l = (struct loop *)p;
   if (action & fBaudRate) l->dcb.BaudRate = dcb->BaudRate;
   if (action & fByteSize) l->dcb.ByteSize = dcb->ByteSize;
-  if (action & fParity) l->dcb.Parity = dcb->Parity;
+  if (action & fbParity) l->dcb.Parity = dcb->Parity;
   if (action & fStopBits) l->dcb.StopBits = dcb->StopBits;
   if (action & fBitMask) l->dcb.BitMask = dcb->BitMask;
   return 1;

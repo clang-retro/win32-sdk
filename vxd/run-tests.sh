@@ -3,7 +3,8 @@
 # and a Windows 3.1 VxD, services.c's (VMM services, and init and pageable
 # code and data) and provider.c's (services and entry points of its own)
 # at each level as dynamic ones, linktest.c's, portdrv.c's (a VCOMM port
-# driver) in C99, C17 and C23, and
+# driver) in C99, C17 and C23, the subsystem headers (compiled, and their
+# layouts checked), and
 # msddk.c's (msddk31.c's for the 3.1 one) with each ms-*-vxd.cfg (import-ms-sdk.py's VxD kits) in CFGDIR,
 # and check each one with vxd-check.py. No emulator runs VxDs: with WIN9X_RUN,
 # a command that takes a folder holding a VxD and CLIENT.EXE, runs
@@ -86,6 +87,38 @@ done
 for std in c99 c17 c23; do
   vxd portdrv-$std "$here/portdrv.c" win95-vxd.cfg --dynamic "--name PORTDRV" \
     -- -O2 -std=$std -Wall -Wextra -Werror
+done
+# The subsystem headers (include/, from gen-vxd-headers.py): each on its
+# own, all of them together (but vcomm.h, whose _DCB is not dcb.h's) at
+# each VXD_WINVER in each C standard and C++, and their layouts.
+hdr() { # NAME CLANG ARGS...
+  t=$1 cc=$2
+  shift 2
+  if "$CFGDIR/$cc" --config="$CFGDIR/win95-vxd.cfg" -Wall -Werror \
+       -Wsystem-headers \
+       -fsyntax-only "$@" >"$t.log" 2>&1; then
+    pass=$((pass + 1))
+  else
+    bad "$t" "$t.log"
+  fi
+}
+: >headers.c
+for h in "$here"/include/*.h "$here/vcomm.h"; do
+  n=$(basename "$h" .h)
+  echo "#include <$n.h>" >"hdr-$n.c"
+  hdr "hdr-$n" clang "hdr-$n.c"
+  [ $n = vcomm ] || echo "#include <$n.h>" >>headers.c
+done
+for w in 0x0400 0x040A 0x045A; do
+  for std in c99 c17 c23; do
+    hdr "headers-$w-$std" clang -std=$std -DVXD_WINVER=$w headers.c
+  done
+  hdr "headers-$w-c++" clang++ -x c++ -DVXD_WINVER=$w headers.c
+done
+for l in "$here"/layout/*.c; do
+  n=$(basename "$l" .c)
+  hdr "layout-$n" clang "$l"
+  hdr "layout-$n-c++" clang++ -x c++ "$l"
 done
 vxd linktest "$here/linktest.c" win95-vxd.cfg --dynamic "" \
   -- -O2 -DVXD_WINVER=0x045A -Wall -Werror

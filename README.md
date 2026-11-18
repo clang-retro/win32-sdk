@@ -742,6 +742,44 @@ file can't include both. A driver calls `_VCOMM_Register_Port_Driver` from
 `Sys_Dynamic_Device_Init`, and `_VCOMM_Add_Port` from the function it
 registered. `vxd/portdrv.c` is a loopback port driver built that way.
 
+The VMM's other subsystems have headers of their own, in
+`sysroots/win9x-msvcrt/include/vxd`, which `win95-vxd.cfg` searches after
+any kit's headers (a VxD built with an `ms-*-vxd` kit still gets the
+DDK's own). Each includes `<vxd.h>`, `<vxdtypes.h>` (the DDK base types
+they use, `ULONG`, `PVOID` and so on) and the headers it needs, and has
+that subsystem's constants, structures, unions, enumerations and
+typedefs, under the same names as the DDK's:
+
+| Header | For |
+| --- | --- |
+| `configmg.h`, `vmmreg.h` | the Configuration Manager (`CONFIGRET`, `CR_*`, `CM_*`, `CMCONFIG`, the resource descriptors, the handler types) and the registry |
+| `vpicd.h`, `vdmad.h`, `vtd.h` | interrupts, DMA and the timer |
+| `vwin32.h`, `vxdldr.h`, `shell.h` | VWIN32, the dynamic VxD loader and the SHELL device |
+| `vpowerd.h`, `pci.h`, `pccard.h`, `vcache.h` | power management, PCI, PC Card and the block cache |
+| `ifs.h` | the installable file system manager (`ioreq`, `IFSFN_*`, the handle function tables) |
+| `ior.h`, `blockdev.h`, `drp.h`, `ilb.h`, `sgd.h`, `med.h`, `vrp.h`, `aep.h`, `isp.h`, `irs.h`, `ios.h`, `dcb.h`, `iop.h`, `ida.h`, `ddb.h`, `dvt.h`, `ivt.h` | IOS and the layered block device drivers (`.PDR` port drivers and the rest) |
+| `ndis.h`, `netvxd.h` | NDIS 3.1 network drivers (from the 95 and 98 DDKs; ME's `ndis.h` is NDIS 5's, for WDM) |
+| `minivdd.h` | display mini-VDDs |
+
+Each declaration is under `#if VXD_WINVER >=` the first DDK that has
+it, and one that changed between DDKs (a count of functions that grew, a
+structure with a new field) has each DDK's version. `dcb.h`'s `_DCB` is
+IOS's device control block, not `<vcomm.h>`'s, so a file can't include
+both, as with the DDKs. `tools/gen-vxd-headers.py` made these headers
+from the 95, 98 and ME DDKs' (with the block device ones from the DDKs'
+`block/inc`): it reads the names, values and types from clang's AST and
+preprocessor, leaving out comments, code and the service wrappers
+(`<vxdsvc.h>` has the services), and writes `vxd/layout/*.c`, which
+`vxd/run-tests.sh` compiles to check that each structure's size and
+offsets are the ones the DDK's compiler gave it. To make them again:
+
+```sh
+python3 tools/gen-vxd-headers.py --kits ~/kits PACKAGE/bin
+```
+
+with the `ms-w95-vxd`, `ms-w98-vxd` and `ms-me-vxd` kits imported into
+PACKAGE and `~/kits` the folder `import-ms-sdk.py` read them from.
+
 `vxd-link.py --version 1.2.3.4` adds a VERSIONINFO resource the way
 Microsoft's VxDs carry one, with `--product-version`, `--description`,
 `--company`, `--product` and `--copyright` for its strings. The resource
