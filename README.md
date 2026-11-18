@@ -800,6 +800,7 @@ typedefs, under the same names as the DDK's:
 | `ior.h`, `blockdev.h`, `drp.h`, `ilb.h`, `sgd.h`, `med.h`, `vrp.h`, `aep.h`, `isp.h`, `irs.h`, `ios.h`, `dcb.h`, `iop.h`, `ida.h`, `ddb.h`, `dvt.h`, `ivt.h` | IOS and the layered block device drivers (`.PDR` port drivers and the rest) |
 | `ndis.h`, `netvxd.h` | NDIS 3.1 network drivers (from the 95 and 98 DDKs; ME's `ndis.h` is NDIS 5's, for WDM) |
 | `minivdd.h` | display mini-VDDs |
+| `mmdevldr.h` | MMDEVLDR, which loads sound cards' VxDs and 16-bit drivers (its services, `MMDEVLDR_Register_Device_Driver` and `_MMDEVLDR_SetDevicePresence` and the rest, are in `<vxdsvc.h>`) |
 | `vkd.h`, `vmd.h` | the keyboard (`SS_*` shift states, the hot key flags, `Paste_Rec`) and the mouse (`VMD_Type_*`, `Mouse_Instance`, the cursor drawing VxD structures) |
 
 Each declaration is under `#if VXD_WINVER >=` the first DDK that has
@@ -821,9 +822,9 @@ python3 tools/gen-vxd-headers.py --kits ~/kits PACKAGE/bin
 with the `ms-w95-vxd`, `ms-w98-vxd` and `ms-me-vxd` kits imported into
 PACKAGE and `~/kits` the folder `import-ms-sdk.py` read them from.
 
-The DDKs have VKD's and VMOUSE's only as MASM include files (`vkd.inc`,
-`vkdpaste.inc`, `vmd.inc`), so `tools/gen-vxd-inc.py PACKAGE/bin` makes
-`vkd.h` and `vmd.h`: it evaluates their `EQU`s, writing each as the number
+The DDKs have VKD's, VMOUSE's and MMDEVLDR's only as MASM include files
+(`vkd.inc`, `vkdpaste.inc`, `vmd.inc`, `mmdevldr.inc`), so
+`tools/gen-vxd-inc.py PACKAGE/bin` makes `vkd.h`, `vmd.h` and `mmdevldr.h`: it evaluates their `EQU`s, writing each as the number
 it comes to, and lays out their `STRUC`s and `UNION`s byte-packed as MASM
 does, for `vxd/layout/vkd.c` and `vmd.c` to check.
 

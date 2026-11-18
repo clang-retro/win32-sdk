@@ -34,7 +34,8 @@ BEGIN = re.compile(r"^\s*Begin_Service_Table\s+(\w+)", re.I)
 END = re.compile(r"^\s*End_Service_Table\b", re.I)
 SERVICE = re.compile(r"^\s*(\w+?)_(Service|StdCall_Service|FastCall_Service)"
                      r"\s+(\w+)\s*(?:,(.*))?$", re.I)
-DEVICE_ID = re.compile(r"^\s*(\w+)_Device_ID\s+EQU\s+<?\s*(\w+)", re.I)
+DEVICE_ID = re.compile(r"^\s*(\w+)_Device_ID\s+EQU\s+<?\s*([^>]+)", re.I)
+NUMBER = re.compile(r"^\s*(\w+)\s+EQU\s+([0-9][0-9A-F]*H|[0-9]+)\s*$", re.I)
 COND = re.compile(r"^\s*(IFDEF|IFNDEF|IF|ELSE|ENDIF)\b\s*(\S*)", re.I)
 
 
@@ -53,13 +54,24 @@ def read_lines(path):
 DEFINED = {"WIN40SERVICES": "4.00", "WIN403SERVICES": "4.03",
            "WIN41SERVICES": "4.10", "WIN49SERVICES": "4.90",
            # Windows 95's VDD is a mini-VDD.
-           "MINIVDD": None}
+           "MINIVDD": None,
+           # VMM.INC's, which MMDEVLDR.INC's table tests for.
+           "DDB_SYS_CRIT_INIT_DONE": None}
+
+
+def number(t):
+    """A MASM number (0002AH, 10), or None."""
+    if re.match(r"^[0-9][0-9A-F]*H$", t):
+        return int(t[:-1], 16)
+    if re.match(r"^[0-9]+$", t):
+        return int(t)
+    return None
 
 
 def parse_dir(incdir, kit_version):
     """Return ({device: [(number, name, convention, version)]},
     {device: id})."""
-    tables, ids = {}, {}
+    tables, ids, nums = {}, {}, {}
     for fn in sorted(os.listdir(incdir)):
         if not fn.lower().endswith(".inc"):
             continue
@@ -67,7 +79,10 @@ def parse_dir(incdir, kit_version):
         for line in lines:
             m = DEVICE_ID.match(strip_comment(line))
             if m:
-                ids.setdefault(m.group(1).upper(), m.group(2).upper())
+                ids.setdefault(m.group(1).upper(), m.group(2).upper().strip())
+            m = NUMBER.match(strip_comment(line))
+            if m:
+                nums.setdefault(m.group(1).upper(), number(m.group(2).upper()))
         dev, n = None, 0
         stack = []      # (active, version) for each IF block
         for line in lines:
@@ -118,14 +133,26 @@ def parse_dir(incdir, kit_version):
             version = max([v for _, v in stack if v] or [kit_version])
             services.append((n, name, conv, min(version, kit_version)))
             n += 1
-    # An ID is a number (0002Ah) or another device's (APM_DEVICE_ID).
+    # An ID is a number (0002Ah), another device's (APM_DEVICE_ID) or
+    # a sum of those and other numbers (Multimedia_OEM_ID + 10).
+    def term(t, depth):
+        if number(t) is not None:
+            return number(t)
+        if t.endswith("_DEVICE_ID"):
+            return resolve(t[:-len("_DEVICE_ID")], depth + 1)
+        return nums.get(t)
+
     def resolve(dev, depth=0):
         v = ids.get(dev)
         if v is None or depth > 8:
             return None
-        if re.match(r"^[0-9][0-9A-F]*H?$", v):
-            return int(v.rstrip("H"), 16)
-        return resolve(re.sub(r"_DEVICE_ID$", "", v), depth + 1)
+        total = 0
+        for t in re.split(r"\s*\+\s*", v):
+            n = term(t, depth)
+            if n is None:
+                return None
+            total += n
+        return total
     return tables, {dev: resolve(dev) for dev in tables}
 
 

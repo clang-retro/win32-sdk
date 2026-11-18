@@ -219,6 +219,11 @@ _LinPageUnLock DWORD DWORD,DWORD,DWORD
 _LinRegionLock DWORD DWORD,DWORD,DWORD
 _LinRegionUnLock DWORD DWORD,DWORD,DWORD
 _LocalizeSprintf DWORD DWORD,DWORD,DWORD
+_MMDEVLDR_AddEnvironmentString void void*,void*
+_MMDEVLDR_GetEnvironmentString DWORD void*,void*,DWORD
+_MMDEVLDR_RemoveEnvironmentString void void*
+_MMDEVLDR_SetDevicePresence void DWORD,void*,DWORD
+_MMDEVLDR_SetEnvironmentString void void*,void*
 _MMGR_Toggle_HMA DWORD DWORD,DWORD
 _MapIntoV86 DWORD DWORD,DWORD,DWORD,DWORD,DWORD,DWORD
 _MapPhysToLinear void* DWORD,DWORD,DWORD

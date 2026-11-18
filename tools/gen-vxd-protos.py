@@ -308,8 +308,13 @@ def main():
             for m in re.finditer(r"(?:^|[;}\n])\s*((?:[A-Za-z_]\w*[\s*]+)+?)"
                                  r"\b([A-Za-z_]\w*)\s*\(([^()]*)\)\s*[;{]",
                                  t, re.M):
-                if m.group(2) in names:
-                    found.setdefault(m.group(2), []).append(
+                n = m.group(2)
+                # MMDEVLDR.H's inline functions drop the underscore of
+                # the services' names (MMDEVLDR_SetDevicePresence).
+                if n.startswith("MMDEVLDR_") and "_" + n in names:
+                    n = "_" + n
+                if n in names:
+                    found.setdefault(n, []).append(
                         (kit, 0, m.group(1), m.group(3), typedefs))
     # The help's pages, for the services the headers leave out: a C
     # prototype, or the assembler syntax (VMMCall _Name, <a, b>), whose

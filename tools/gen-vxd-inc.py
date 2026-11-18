@@ -3,8 +3,9 @@
 
     gen-vxd-inc.py CFGDIR [HEADER ...]
 
-VKD (the keyboard) and VMOUSE (the mouse) have no C headers in the 95, 98
-or ME DDK, only vkd.inc, vkdpaste.inc and vmd.inc. This reads them from the
+VKD (the keyboard), VMOUSE (the mouse) and MMDEVLDR (multimedia devices)
+have no C headers in the 98 or ME DDK (or, but MMDEVLDR's, the 95 DDK),
+only vkd.inc, vkdpaste.inc, vmd.inc and mmdevldr.inc. This reads them from the
 kits that import-ms-sdk.py imported beside CFGDIR (sysroots/ms-*-vxd/
 include), evaluates their EQUs and lays out their STRUCs and UNIONs as MASM
 does (byte-packed), and writes vxd/include/HEADER.h with the names and
@@ -40,6 +41,11 @@ SPECS = {
    buffer's Paste_Rec and completion codes, and the VKD_* protected mode
    API's functions and FKSS_* shift states. The services are VKD_* in
    <vxdsvc.h>."""),
+    "mmdevldr": ("mmdevldr.inc", """MMDEVLDR, the loader of the VxDs and
+   16-bit drivers of sound cards and other multimedia devices: its device
+   ID and version. The services (MMDEVLDR_Register_Device_Driver, which a
+   sound card's VxD calls for its devnode, _MMDEVLDR_SetDevicePresence
+   and the rest) are in <vxdsvc.h>."""),
     "vmd": ("vmd.inc", """The virtual mouse device (VMOUSE): the mouse types
    (VMD_Type_*), the VMDAPI_* functions, the Mouse_Instance a mini mouse
    driver fills in and its MIF_* flags, and the cursor drawing VxD
@@ -514,8 +520,9 @@ def generate(cfgdir, name, skip):
             if fname:
                 t.append("A(offsetof(%s, %s) == %d)\n"
                          % (rec, c_name(fname), off))
-    with open(os.path.join(LAYOUT, name + ".c"), "w") as f:
-        f.write("".join(t))
+    if layouts:
+        with open(os.path.join(LAYOUT, name + ".c"), "w") as f:
+            f.write("".join(t))
     print("%s.h: %d names, %d layout checks" % (
         name, len(order), sum(1 + len(r[3]) for r in layouts)))
 
