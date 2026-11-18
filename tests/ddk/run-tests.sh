@@ -177,21 +177,34 @@ if [ -f "$CFGDIR/nt4-ddk.cfg" ]; then
     pass=$((pass + 1))
   fi
 fi
-# hdaudio.sys (drivers/hdaudio), the HD Audio driver for 98, 98 SE and
-# ME, at each level, checked to import only what their WDM and port class
-# have. drivers/hdaudio/test/run-tests.sh tests its hardware code in QEMU.
+# drivers/hdaudio for 98, 98 SE and ME, at each level: hdaudbus.sys, the
+# HD Audio bus driver, hdaudio.sys, the audio function driver (port
+# class) on its bus interface, and modem/hdamodem.sys, the sample modem
+# function driver, each checked to import only what their WDM and port
+# class have. drivers/hdaudio/test/run-tests.sh tests the
+# hardware code in QEMU.
 hda=$here/../../drivers/hdaudio
-if [ -f "$CFGDIR/nt4-ddk.cfg" ] && [ -f "$hda/hdaudio.c" ]; then
+if [ -f "$CFGDIR/nt4-ddk.cfg" ] && [ -f "$hda/hdaudbus.c" ]; then
   for opt in O0 O2 Os; do
-    t=hdaudio-$opt
-    if ! "$CFGDIR/clang" --config="$CFGDIR/nt4-ddk.cfg" -march=i486 -$opt \
-         -Wall -Wextra -Werror "$hda/hda.c" "$hda/hdaudio.c" -lportcls \
-         -lksguid -o $t.sys >$t.log 2>&1; then
-      bad "$t build" $t.log; continue
-    fi
-    for v in 98 98se me; do
-      if ${PYTHON:-python3} "$check" --wdm $v $t.sys >$t-$v.chk 2>&1
-      then pass=$((pass + 1)); else bad "$t wdm $v" $t-$v.chk; fi
+    for drv in hdaudbus hdaudio hdamodem; do
+      t=$drv-$opt
+      if [ $drv = hdaudbus ]; then
+        src="$hda/hda.c $hda/codec.c $hda/hdaudbus.c"; libs=
+      elif [ $drv = hdamodem ]; then
+        src=$hda/modem/hdamodem.c; libs=
+      else
+        src="$hda/codec.c $hda/hdaudio.c"; libs="-lportcls -lksguid"
+      fi
+      # shellcheck disable=SC2086
+      if ! "$CFGDIR/clang" --config="$CFGDIR/nt4-ddk.cfg" -march=i486 \
+           -$opt -Wall -Wextra -Werror $src $libs -o $t.sys >$t.log 2>&1
+      then
+        bad "$t build" $t.log; continue
+      fi
+      for v in 98 98se me; do
+        if ${PYTHON:-python3} "$check" --wdm $v $t.sys >$t-$v.chk 2>&1
+        then pass=$((pass + 1)); else bad "$t wdm $v" $t-$v.chk; fi
+      done
     done
   done
 fi

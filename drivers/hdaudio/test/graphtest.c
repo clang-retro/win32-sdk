@@ -2,10 +2,10 @@
    codec shaped like the ones in PCs, which QEMU's codecs are not: two
    DACs behind mixers, a speaker and a headphone pin that can take either,
    a line out pin the configuration says is not connected, an S/PDIF pin,
-   input pins, and connection lists in the long form and with ranges.
+   input pins, and connection lists in the long form and with ranges; and
+   a modem function group beside the audio one.
    Built and run on the host by run-tests.sh. */
-#define HDA_FAKE_CODEC
-#include "../hda.c"
+#include "../codec.c"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,7 +21,7 @@ typedef struct {
   ULONG conn[8]; /* raw entries, range bits included */
 } FAKE;
 
-static FAKE nodes[0x20];
+static FAKE nodes[0x30];
 
 #define W(type, extra) ((ULONG)(type) << 20 | (extra))
 #define PINCFG(port, dev) ((ULONG)(port) << 30 | (ULONG)(dev) << 20)
@@ -77,26 +77,28 @@ static char log_[8192];
 static ULONG fake(ULONG verb) {
   ULONG nid = verb >> 20 & 0x7F, v12 = verb >> 8 & 0xFFF, p8 = verb & 0xFF;
   ULONG v4 = verb >> 16 & 0xF;
-  FAKE *f = &nodes[nid < 0x20 ? nid : 0];
+  FAKE *f = &nodes[nid < 0x30 ? nid : 0];
   char line[64];
   if (v12 == HDA_GET_PARAMETER) {
     switch (p8) {
     case HDA_PAR_VENDOR_ID:
       return nid == 0 ? 0x10ec0123 : 0;
     case HDA_PAR_NODE_COUNT:
-      return nid == 0 ? 1 << 16 | 1 : nid == 1 ? 0x02 << 16 | 0x1e : 0;
+      return nid == 0 ? 0x20 << 16 | 2 : nid == 0x20 ? 0x02 << 16 | 0x1d : 0;
     case HDA_PAR_FG_TYPE:
-      return nid == 1 ? HDA_FG_AUDIO : 0;
+      return nid == 0x20 ? HDA_FG_AUDIO
+             : nid == 0x21 ? 0x100 | HDA_FG_MODEM
+                           : 0;
     case HDA_PAR_WIDGET_CAPS:
       return f->caps ? f->caps : W(0xF, 0);
     case HDA_PAR_PCM:
-      return nid == 1 ? 0x000E0560 : 0;
+      return nid == 0x20 ? 0x000E0560 : 0;
     case HDA_PAR_PIN_CAPS:
       return f->pincaps;
     case HDA_PAR_OUT_AMP_CAPS:
-      return nid == 1 ? 0 : f->outamp;
+      return nid == 0x20 ? 0 : f->outamp;
     case HDA_PAR_IN_AMP_CAPS:
-      return nid == 1 ? 0 : f->inamp;
+      return nid == 0x20 ? 0 : f->inamp;
     case HDA_PAR_CONN_LIST_LEN:
       return (ULONG)f->nconn | (f->longform ? 0x80 : 0);
     }
@@ -104,6 +106,8 @@ static ULONG fake(ULONG verb) {
   }
   if (v12 == HDA_GET_CONFIG_DEFAULT)
     return f->config;
+  if (v12 == HDA_GET_SUBSYSTEM_ID)
+    return 0x1234abcd;
   if (v12 == HDA_GET_CONN_LIST) {
     ULONG r = 0, per = f->longform ? 2 : 4, bits = f->longform ? 16 : 8;
     for (ULONG i = 0; i < per && p8 + i < (ULONG)f->nconn; i++)
@@ -126,8 +130,8 @@ static ULONG fake(ULONG verb) {
   return 0;
 }
 
-ULONG hda_verb(HDA *h, ULONG verb) {
-  (void)h;
+static ULONG fake_verb(PVOID context, ULONG verb) {
+  (void)context;
   return fake(verb);
 }
 
@@ -138,10 +142,22 @@ static void expect(int ok, const char *what) {
 }
 
 int main(void) {
-  static HDA h;
+  static HDA_CODEC h;
+  HDA_FUNCTION fns[4];
   setup();
-  NTSTATUS st = probe_codec(&h, 0);
-  expect(st == STATUS_SUCCESS, "probe_codec");
+  ULONG n = codec_functions(fake_verb, NULL, 0, fns, 4);
+  expect(n == 2 && fns[0].Nid == 0x20 && fns[0].Type == HDA_FG_AUDIO &&
+             fns[1].Nid == 0x21 && fns[1].Type == HDA_FG_MODEM &&
+             fns[1].Vendor == 0x10ec0123 && fns[1].Subsystem == 0x1234abcd,
+         "function groups: audio at 20, modem at 21");
+  h.Verb = fake_verb;
+  h.Cad = 0;
+  h.AfgNid = 0x20;
+  NTSTATUS st = codec_probe(&h);
+  expect(st == STATUS_SUCCESS, "codec_probe");
+  expect(codec_probe(&(HDA_CODEC){.Verb = fake_verb, .AfgNid = 0x21}) ==
+             STATUS_NO_SUCH_DEVICE,
+         "codec_probe refuses the modem function group");
   printf("path:");
   for (ULONG i = 0; i < h.PathLength; i++)
     printf(" %02x/%u", h.Path[i].Nid, h.Path[i].Index);

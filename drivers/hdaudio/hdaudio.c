@@ -1,14 +1,18 @@
-/* hdaudio.sys: a WDM audio driver (port class) for Intel High Definition
-   Audio controllers on Windows 98, 98 SE and ME, in C. It plays 16-bit
-   stereo PCM at 44.1 or 48 kHz through the first analog output path of
-   the first codec, with a volume and a mute control.
+/* hdaudio.sys: the audio function driver (port class) for High Definition
+   Audio on Windows 98, 98 SE and ME, in C. It drives the audio function
+   group (HDAUDIO\FUNC_01) that hdaudbus.sys finds on a codec, only
+   through the bus driver's HDAUDIO_BUS_INTERFACE (<hdaudio.h>), so it
+   also sits on XP's HDAUDBUS.SYS. It plays 16-bit stereo PCM at 44.1 or
+   48 kHz through the function group's first analog output path, with a
+   volume and a mute control (codec.c chooses the path).
 
-   The adapter (StartDevice) maps the controller, starts it and its codec
-   (hda.c) and makes two subdevices:
+   StartDevice gets the bus interface from the function group's device and
+   makes two subdevices:
      Wave      a WaveCyclic miniport: one render pin, a DAC node and a
-               bridge pin. Its stream's cyclic buffer is the one the BDL
-               describes, a fragment per notification interval, and the
-               controller's interrupt on each fragment notifies the port.
+               bridge pin. Its stream's DMA buffer is the bus driver's
+               (AllocateDmaBuffer), behind an IDmaChannel of our own, and
+               a timer notifies the port each interval, as the bus driver
+               gives a function driver no interrupt.
      Topology  a topology miniport: the bridge pin from Wave, a volume and
                a mute node, and the line out pin. The nodes drive the
                first amplifier on the codec's path that has them.
@@ -17,24 +21,39 @@
 #include <initguid.h>
 #include <portcls.h>
 #include <ksmedia.h>
+#include <hdaudio.h>
 
 #define TAG 'aDHc'
-#define WAVE_BUFFER_MAX 0x10000 /* bytes of DMA buffer for the stream */
-#define FRAGMENTS 8             /* notification intervals in the buffer */
+#define FRAGMENTS 8 /* notification intervals in the DMA buffer */
 
 typedef struct WAVE WAVE;
 typedef struct STREAM STREAM;
 
 typedef struct {
   LONG Refs;
-  HDA Hda;
-  PDMACHANNEL RingsDma;
-  PINTERRUPTSYNC Sync;
-  WAVE *Wave; /* for the interrupt; NULL until the wave miniport exists */
+  HDAUDIO_BUS_INTERFACE Bus;
+  HDA_CODEC Codec;
+  WAVE *Wave;
   ULONG Gain[2];
   LONG Level[2]; /* 1/65536 dB */
   BOOLEAN Mute;
 } ADAPTER;
+
+/* The stream's DMA buffer: an engine and buffer of the bus driver's,
+   behind IDmaChannel for the port. */
+typedef struct {
+  const IDmaChannelVtbl *lpVtbl;
+  LONG Refs;
+  ADAPTER *Adapter;
+  HANDLE Engine;
+  PMDL Mdl;
+  PVOID Va;
+  ULONG Size;       /* allocated: the cyclic buffer the engine runs over */
+  ULONG BufferSize; /* what the port is told */
+  UCHAR Tag;
+  USHORT Fmt;
+  volatile ULONG *Position;
+} DMA;
 
 struct WAVE {
   const IMiniportWaveCyclicVtbl *lpVtbl;
@@ -42,7 +61,6 @@ struct WAVE {
   ADAPTER *Adapter;
   PPORTWAVECYCLIC Port;
   PSERVICEGROUP ServiceGroup;
-  PDMACHANNEL Dma;
   STREAM *Stream; /* the one stream there can be */
 };
 
@@ -50,10 +68,12 @@ struct STREAM {
   const IMiniportWaveCyclicStreamVtbl *lpVtbl;
   LONG Refs;
   WAVE *Wave;
+  DMA *Dma;
   KSSTATE State;
-  BOOLEAN Programmed;
-  USHORT Fmt;
+  BOOLEAN Fresh; /* reset and not run since: the position is 0 */
   ULONG Rate, Interval, FrameSize;
+  KTIMER Timer;
+  KDPC Dpc;
 };
 
 typedef struct {
@@ -74,55 +94,32 @@ static void *alloc(ULONG size) {
   return p;
 }
 
-/* IDmaChannel::PhysicalAddress returns a PHYSICAL_ADDRESS, a struct. Port
-   class is C++ built with Microsoft's compiler, whose member functions
-   return any struct through a hidden pointer that comes after this; a C
-   call through the vtable would expect it in EDX:EAX instead. */
-typedef PHYSICAL_ADDRESS *(NTAPI *PHYSICAL_ADDRESS_METHOD)(
-    PDMACHANNEL This, PHYSICAL_ADDRESS *Result);
-
-static ULONG dma_phys(PDMACHANNEL dma) {
-  PHYSICAL_ADDRESS pa;
-  pa.QuadPart = 0;
-  ((PHYSICAL_ADDRESS_METHOD)(void (*)(void))dma->lpVtbl->PhysicalAddress)(
-      dma, &pa);
-  return pa.LowPart;
-}
-
 /* ---- The adapter ---- */
 
 static void adapter_release(ADAPTER *a) {
   if (__sync_sub_and_fetch(&a->Refs, 1))
     return;
-  if (a->Sync) {
-    a->Sync->lpVtbl->Disconnect(a->Sync);
-    a->Sync->lpVtbl->Release(a->Sync);
-  }
-  hda_shutdown(&a->Hda);
-  if (a->RingsDma) {
-    a->RingsDma->lpVtbl->FreeBuffer(a->RingsDma);
-    a->RingsDma->lpVtbl->Release(a->RingsDma);
-  }
-  if (a->Hda.Regs)
-    MmUnmapIoSpace((PVOID)a->Hda.Regs, a->Hda.RegsLength);
+  if (a->Bus.InterfaceDereference)
+    a->Bus.InterfaceDereference(a->Bus.Context);
   ExFreePool(a);
 }
 
-static NTSTATUS NTAPI isr(PINTERRUPTSYNC sync, PVOID context) {
+/* A codec verb through the bus driver, for codec.c. */
+static ULONG bus_verb(PVOID context, ULONG verb) {
   ADAPTER *a = context;
-  WAVE *w;
-  (void)sync;
-  if (!hda_interrupt(&a->Hda))
-    return STATUS_UNSUCCESSFUL; /* not ours: the line may be shared */
-  w = a->Wave;
-  if (w && w->Port && w->ServiceGroup)
-    w->Port->lpVtbl->Notify(w->Port, w->ServiceGroup);
-  return STATUS_SUCCESS;
+  HDAUDIO_CODEC_TRANSFER t;
+  RtlZeroMemory(&t, sizeof t);
+  t.Output.Command = verb;
+  if (!NT_SUCCESS(a->Bus.TransferCodecVerbs(a->Bus.Context, 1, &t, NULL,
+                                            NULL)) ||
+      !t.Input.IsValid)
+    return 0xFFFFFFFF;
+  return t.Input.Response;
 }
 
 /* The amplifier's range in 1/65536 dB: 0 dB is its offset and each step
    (size + 1) / 4 dB. A path without one gets a fixed 0 dB. */
-static void level_range(HDA *h, LONG *min, LONG *max, LONG *step) {
+static void level_range(HDA_CODEC *h, LONG *min, LONG *max, LONG *step) {
   ULONG c = h->VolNid ? h->VolCaps : 0;
   *step = (LONG)(HDA_AMPCAP_SIZE(c) + 1) * 16384;
   *min = -(LONG)HDA_AMPCAP_OFFSET(c) * *step;
@@ -131,7 +128,7 @@ static void level_range(HDA *h, LONG *min, LONG *max, LONG *step) {
 
 static void set_level(ADAPTER *a, ULONG ch, LONG level) {
   LONG min, max, step;
-  level_range(&a->Hda, &min, &max, &step);
+  level_range(&a->Codec, &min, &max, &step);
   if (level < min)
     level = min;
   if (level > max)
@@ -140,13 +137,170 @@ static void set_level(ADAPTER *a, ULONG ch, LONG level) {
   a->Level[ch] = min + (LONG)a->Gain[ch] * step;
 }
 
+/* ---- The DMA channel (IDmaChannel) over the bus driver's buffer ---- */
+
+static const IDmaChannelVtbl dma_vtbl;
+
+/* Free the buffer and the engine, and point the DAC at no stream. */
+static void dma_free(DMA *d) {
+  ADAPTER *a = d->Adapter;
+  if (d->Mdl) {
+    codec_stream(&a->Codec, 0, 0);
+    a->Bus.FreeDmaBuffer(a->Bus.Context, d->Engine);
+    d->Mdl = NULL;
+    d->Va = NULL;
+    d->Size = d->BufferSize = 0;
+  }
+  if (d->Engine) {
+    a->Bus.FreeDmaEngine(a->Bus.Context, d->Engine);
+    d->Engine = NULL;
+  }
+}
+
+/* An engine for 16-bit stereo at rate and a buffer of size bytes, and the
+   DAC on its stream. */
+static NTSTATUS dma_setup(DMA *d, ULONG rate, ULONG size) {
+  ADAPTER *a = d->Adapter;
+  HDAUDIO_STREAM_FORMAT f;
+  HDAUDIO_CONVERTER_FORMAT conv;
+  SIZE_T got;
+  ULONG fifo;
+  NTSTATUS st;
+  dma_free(d);
+  f.SampleRate = rate;
+  f.ValidBitsPerSample = 16;
+  f.ContainerSize = 16;
+  f.NumberOfChannels = 2;
+  st = a->Bus.AllocateRenderDmaEngine(a->Bus.Context, &f, FALSE, &d->Engine,
+                                      &conv);
+  if (!NT_SUCCESS(st)) {
+    d->Engine = NULL;
+    return st;
+  }
+  st = a->Bus.AllocateDmaBuffer(a->Bus.Context, d->Engine, size, &d->Mdl,
+                                &got, &d->Tag, &fifo);
+  if (!NT_SUCCESS(st)) {
+    d->Mdl = NULL;
+    dma_free(d);
+    return st;
+  }
+  d->Va = MmGetSystemAddressForMdl(d->Mdl);
+  d->Size = d->BufferSize = (ULONG)got;
+  d->Fmt = conv.ConverterFormat;
+  st = a->Bus.GetLinkPositionRegister(a->Bus.Context, d->Engine,
+                                      (PULONG *)&d->Position);
+  if (!NT_SUCCESS(st)) {
+    dma_free(d);
+    return st;
+  }
+  codec_stream(&a->Codec, d->Tag, d->Fmt);
+  return STATUS_SUCCESS;
+}
+
+static NTSTATUS NTAPI dma_qi(PDMACHANNEL This, REFIID iid, PVOID *out) {
+  if (guid_eq(iid, &IID_IUnknown) || guid_eq(iid, &IID_IDmaChannel)) {
+    *out = This;
+    This->lpVtbl->AddRef(This);
+    return STATUS_SUCCESS;
+  }
+  *out = NULL;
+  return STATUS_INVALID_PARAMETER;
+}
+
+static ULONG NTAPI dma_addref(PDMACHANNEL This) {
+  return __sync_add_and_fetch(&((DMA *)This)->Refs, 1);
+}
+
+static ULONG NTAPI dma_release(PDMACHANNEL This) {
+  DMA *d = (DMA *)This;
+  LONG r = __sync_sub_and_fetch(&d->Refs, 1);
+  if (!r) {
+    dma_free(d);
+    adapter_release(d->Adapter);
+    ExFreePool(d);
+  }
+  return r;
+}
+
+/* The buffer comes from the bus driver with the stream; the port's own
+   requests for one are answered with it. */
+static NTSTATUS NTAPI dma_allocate_buffer(PDMACHANNEL This, ULONG size,
+                                          PPHYSICAL_ADDRESS constraint) {
+  DMA *d = (DMA *)This;
+  (void)constraint;
+  return d->Mdl && size <= d->Size ? STATUS_SUCCESS
+                                   : STATUS_INSUFFICIENT_RESOURCES;
+}
+
+static void NTAPI dma_free_buffer(PDMACHANNEL This) { (void)This; }
+
+static ULONG NTAPI dma_size(PDMACHANNEL This) {
+  return ((DMA *)This)->Size;
+}
+
+static ULONG NTAPI dma_buffer_size(PDMACHANNEL This) {
+  return ((DMA *)This)->BufferSize;
+}
+
+static void NTAPI dma_set_buffer_size(PDMACHANNEL This, ULONG size) {
+  DMA *d = (DMA *)This;
+  d->BufferSize = size <= d->Size ? size : d->Size;
+}
+
+static PVOID NTAPI dma_system_address(PDMACHANNEL This) {
+  return ((DMA *)This)->Va;
+}
+
+/* Called as Microsoft's compiler calls a member function that returns a
+   struct: the result through a pointer after This (see dma_phys in the
+   first version's notes, README.md). */
+static PHYSICAL_ADDRESS *NTAPI dma_physical_address(PDMACHANNEL This,
+                                                    PHYSICAL_ADDRESS *out) {
+  DMA *d = (DMA *)This;
+  out->QuadPart = d->Mdl ? (LONGLONG)MmGetMdlPfnArray(d->Mdl)[0] << PAGE_SHIFT
+                         : 0;
+  if (d->Mdl)
+    out->QuadPart += MmGetMdlByteOffset(d->Mdl);
+  return out;
+}
+
+static PADAPTER_OBJECT NTAPI dma_adapter(PDMACHANNEL This) {
+  (void)This;
+  return NULL;
+}
+
+static void NTAPI dma_copy(PDMACHANNEL This, PVOID dst, PVOID src,
+                           ULONG n) {
+  (void)This;
+  RtlCopyMemory(dst, src, n);
+}
+
+static const IDmaChannelVtbl dma_vtbl = {
+    .QueryInterface = dma_qi,
+    .AddRef = dma_addref,
+    .Release = dma_release,
+    .AllocateBuffer = dma_allocate_buffer,
+    .FreeBuffer = dma_free_buffer,
+    .TransferCount = dma_buffer_size,
+    .MaximumBufferSize = dma_size,
+    .AllocatedBufferSize = dma_size,
+    .BufferSize = dma_buffer_size,
+    .SetBufferSize = dma_set_buffer_size,
+    .SystemAddress = dma_system_address,
+    .PhysicalAddress = (PHYSICAL_ADDRESS(NTAPI *)(PDMACHANNEL))(
+        void (*)(void))dma_physical_address,
+    .GetAdapterObject = dma_adapter,
+    .CopyTo = dma_copy,
+    .CopyFrom = dma_copy,
+};
+
 /* ---- The wave stream (IMiniportWaveCyclicStream) ---- */
 
 static const IMiniportWaveCyclicStreamVtbl stream_vtbl;
 
-/* The HDA stream format of a KSDATAFORMAT, or 0 when it is not 16-bit
-   stereo PCM at a rate the DAC has. */
-static USHORT stream_format(HDA *h, PKSDATAFORMAT df, ULONG *rate) {
+/* The rate of a KSDATAFORMAT, or 0 when it is not 16-bit stereo PCM at a
+   rate the DAC has. */
+static ULONG stream_rate(HDA_CODEC *h, PKSDATAFORMAT df) {
   PWAVEFORMATEX wfx;
   if (df->FormatSize < sizeof(KSDATAFORMAT_WAVEFORMATEX) ||
       !guid_eq(&df->MajorFormat, &KSDATAFORMAT_TYPE_AUDIO) ||
@@ -159,25 +313,33 @@ static USHORT stream_format(HDA *h, PKSDATAFORMAT df, ULONG *rate) {
       wfx->nChannels != 2 || wfx->wBitsPerSample != 16 ||
       !(h->DacPcm & (1u << 17)))
     return 0;
-  *rate = wfx->nSamplesPerSec;
-  if (*rate == 48000 && (h->DacPcm & (1u << 6)))
-    return HDA_FMT_48K | HDA_FMT_16BIT | HDA_FMT_STEREO;
-  if (*rate == 44100 && (h->DacPcm & (1u << 5)))
-    return HDA_FMT_44K1 | HDA_FMT_16BIT | HDA_FMT_STEREO;
+  if (wfx->nSamplesPerSec == 48000 && (h->DacPcm & (1u << 6)))
+    return 48000;
+  if (wfx->nSamplesPerSec == 44100 && (h->DacPcm & (1u << 5)))
+    return 44100;
   return 0;
 }
 
-/* The fragment for the notification interval, in whole 128-byte units
-   (the BDL's alignment), and the buffer of FRAGMENTS of them. */
-static void stream_size(STREAM *s) {
-  PDMACHANNEL dma = s->Wave->Dma;
+/* The fragment for the notification interval in whole 128-byte units (a
+   BDL entry's alignment), and a buffer of FRAGMENTS of them from the bus
+   driver, for the rate. */
+static NTSTATUS stream_setup(STREAM *s) {
   ULONG frame = s->Rate * 4 / 1000 * (s->Interval ? s->Interval : 10);
-  ULONG max = dma->lpVtbl->AllocatedBufferSize(dma);
+  NTSTATUS st;
   frame = (frame + 127) & ~127u;
-  while (frame * FRAGMENTS > max && frame > 128)
-    frame -= 128;
-  s->FrameSize = frame;
-  dma->lpVtbl->SetBufferSize(dma, frame * FRAGMENTS);
+  st = dma_setup(s->Dma, s->Rate, frame * FRAGMENTS);
+  if (NT_SUCCESS(st))
+    s->FrameSize = frame;
+  s->Fresh = TRUE;
+  return st;
+}
+
+/* Each interval: the port reads the position and moves data. */
+static VOID NTAPI stream_tick(PKDPC dpc, PVOID context, PVOID a, PVOID b) {
+  STREAM *s = context;
+  WAVE *w = s->Wave;
+  (void)dpc, (void)a, (void)b;
+  w->Port->lpVtbl->Notify(w->Port, w->ServiceGroup);
 }
 
 static NTSTATUS NTAPI stream_qi(PMINIPORTWAVECYCLICSTREAM This, REFIID iid,
@@ -200,7 +362,13 @@ static ULONG NTAPI stream_release(PMINIPORTWAVECYCLICSTREAM This) {
   STREAM *s = (STREAM *)This;
   LONG r = __sync_sub_and_fetch(&s->Refs, 1);
   if (!r) {
-    hda_stream_reset(&s->Wave->Adapter->Hda);
+    KeCancelTimer(&s->Timer);
+    if (s->Dma->Engine) {
+      HANDLE h = s->Dma->Engine;
+      s->Wave->Adapter->Bus.SetDmaEngineState(s->Wave->Adapter->Bus.Context,
+                                              ResetState, 1, &h);
+    }
+    s->Dma->lpVtbl->Release((PDMACHANNEL)s->Dma);
     s->Wave->Stream = NULL;
     s->Wave->lpVtbl->Release((PMINIPORTWAVECYCLIC)s->Wave);
     ExFreePool(s);
@@ -212,68 +380,71 @@ static NTSTATUS NTAPI stream_set_format(PMINIPORTWAVECYCLICSTREAM This,
                                         PKSDATAFORMAT df) {
   STREAM *s = (STREAM *)This;
   ULONG rate;
-  USHORT fmt;
   if (s->State == KSSTATE_RUN)
     return STATUS_INVALID_DEVICE_REQUEST;
-  fmt = stream_format(&s->Wave->Adapter->Hda, df, &rate);
-  if (!fmt)
+  rate = stream_rate(&s->Wave->Adapter->Codec, df);
+  if (!rate)
     return STATUS_INVALID_PARAMETER;
-  s->Fmt = fmt;
+  if (rate == s->Rate)
+    return STATUS_SUCCESS;
   s->Rate = rate;
-  stream_size(s);
-  s->Programmed = FALSE;
-  return STATUS_SUCCESS;
+  return stream_setup(s);
 }
 
 static ULONG NTAPI stream_set_notification_freq(
     PMINIPORTWAVECYCLICSTREAM This, ULONG interval, PULONG frame) {
   STREAM *s = (STREAM *)This;
-  s->Interval = interval;
-  stream_size(s);
-  s->Programmed = FALSE;
+  if (interval != s->Interval && s->State != KSSTATE_RUN) {
+    s->Interval = interval;
+    stream_setup(s);
+  }
   *frame = s->FrameSize;
-  return interval;
+  return s->Interval;
 }
 
 static NTSTATUS NTAPI stream_set_state(PMINIPORTWAVECYCLICSTREAM This,
                                        KSSTATE state) {
   STREAM *s = (STREAM *)This;
-  HDA *h = &s->Wave->Adapter->Hda;
-  PDMACHANNEL dma = s->Wave->Dma;
+  ADAPTER *a = s->Wave->Adapter;
+  HANDLE h = s->Dma->Engine;
   NTSTATUS st = STATUS_SUCCESS;
+  LARGE_INTEGER due;
+  if (!h)
+    return STATUS_INVALID_DEVICE_REQUEST;
   switch (state) {
   case KSSTATE_RUN:
-    if (!s->Programmed) {
-      st = hda_stream_start(h, dma_phys(dma),
-                            dma->lpVtbl->BufferSize(dma), s->FrameSize,
-                            s->Fmt);
-      if (!NT_SUCCESS(st))
-        return st;
-      s->Programmed = TRUE;
-    }
-    hda_stream_run(h, TRUE);
+    st = a->Bus.SetDmaEngineState(a->Bus.Context, RunState, 1, &h);
+    if (!NT_SUCCESS(st))
+      return st;
+    s->Fresh = FALSE;
+    due.QuadPart = -10000LL * s->Interval;
+    KeSetTimerEx(&s->Timer, due, s->Interval, &s->Dpc);
     break;
   case KSSTATE_ACQUIRE:
   case KSSTATE_PAUSE:
-    if (s->State == KSSTATE_RUN)
-      hda_stream_run(h, FALSE);
+    if (s->State == KSSTATE_RUN) {
+      KeCancelTimer(&s->Timer);
+      st = a->Bus.SetDmaEngineState(a->Bus.Context, StopState, 1, &h);
+    }
     break;
   case KSSTATE_STOP:
-    hda_stream_reset(h); /* back to the start of the buffer */
-    s->Programmed = FALSE;
+    KeCancelTimer(&s->Timer);
+    /* Back to the start of the buffer. */
+    st = a->Bus.SetDmaEngineState(a->Bus.Context, ResetState, 1, &h);
+    s->Fresh = TRUE;
     break;
   }
-  s->State = state;
+  if (NT_SUCCESS(st))
+    s->State = state;
   return st;
 }
 
 static NTSTATUS NTAPI stream_get_position(PMINIPORTWAVECYCLICSTREAM This,
                                           PULONG position) {
   STREAM *s = (STREAM *)This;
-  PDMACHANNEL dma = s->Wave->Dma;
-  ULONG size = dma->lpVtbl->BufferSize(dma);
-  ULONG pos = s->Programmed ? hda_stream_position(&s->Wave->Adapter->Hda) : 0;
-  *position = size ? pos % size : 0;
+  DMA *d = s->Dma;
+  ULONG pos = s->Fresh || !d->Position ? 0 : *d->Position;
+  *position = d->BufferSize ? pos % d->BufferSize : 0;
   return STATUS_SUCCESS;
 }
 
@@ -390,10 +561,6 @@ static ULONG NTAPI wave_release(PMINIPORTWAVECYCLIC This) {
     w->Adapter->Wave = NULL;
     if (w->ServiceGroup)
       w->ServiceGroup->lpVtbl->Release(w->ServiceGroup);
-    if (w->Dma) {
-      w->Dma->lpVtbl->FreeBuffer(w->Dma);
-      w->Dma->lpVtbl->Release(w->Dma);
-    }
     if (w->Port)
       w->Port->lpVtbl->Release(w->Port);
     adapter_release(w->Adapter);
@@ -419,11 +586,11 @@ static NTSTATUS NTAPI wave_intersect(PMINIPORTWAVECYCLIC This, ULONG pin,
   PKSDATARANGE_AUDIO c = (PKSDATARANGE_AUDIO)client;
   ULONG rate = ((PKSDATARANGE_AUDIO)ours)->MaximumSampleFrequency;
   PKSDATAFORMAT_WAVEFORMATEX f = result;
-  ULONG sizebit = rate == 48000 ? 1u << 6 : 1u << 5;
+  ULONG ratebit = rate == 48000 ? 1u << 6 : 1u << 5;
   if (pin != 0 || !guid_eq(&client->Specifier,
                            &KSDATAFORMAT_SPECIFIER_WAVEFORMATEX))
     return STATUS_NOT_IMPLEMENTED; /* port class's own intersection */
-  if (!(w->Adapter->Hda.DacPcm & sizebit))
+  if (!(w->Adapter->Codec.DacPcm & ratebit))
     return STATUS_NO_MATCH;
   if (client->FormatSize >= sizeof(KSDATARANGE_AUDIO) &&
       (c->MaximumChannels < 2 || c->MinimumBitsPerSample > 16 ||
@@ -454,23 +621,11 @@ static NTSTATUS NTAPI wave_init(PMINIPORTWAVECYCLIC This, PUNKNOWN adapter,
                                 PRESOURCELIST resources,
                                 PPORTWAVECYCLIC port) {
   WAVE *w = (WAVE *)This;
-  NTSTATUS st;
-  (void)adapter;
+  (void)adapter, (void)resources;
   w->Port = port;
   port->lpVtbl->AddRef(port);
-  st = PcNewServiceGroup(&w->ServiceGroup, NULL);
-  if (!NT_SUCCESS(st))
-    return st;
-  st = port->lpVtbl->NewMasterDmaChannel(port, &w->Dma, NULL, resources,
-                                         WAVE_BUFFER_MAX, TRUE, FALSE,
-                                         Width32Bits, MaximumDmaSpeed);
-  if (!NT_SUCCESS(st))
-    return st;
-  st = w->Dma->lpVtbl->AllocateBuffer(w->Dma, WAVE_BUFFER_MAX, NULL);
-  if (!NT_SUCCESS(st))
-    return st;
   w->Adapter->Wave = w;
-  return STATUS_SUCCESS;
+  return PcNewServiceGroup(&w->ServiceGroup, NULL);
 }
 
 static NTSTATUS NTAPI wave_new_stream(PMINIPORTWAVECYCLIC This,
@@ -481,32 +636,50 @@ static NTSTATUS NTAPI wave_new_stream(PMINIPORTWAVECYCLIC This,
                                       PSERVICEGROUP *group) {
   WAVE *w = (WAVE *)This;
   STREAM *s;
+  DMA *d;
   ULONG rate;
-  USHORT fmt;
+  NTSTATUS st;
   (void)outer, (void)pool;
   if (capture || pin != 0)
     return STATUS_INVALID_DEVICE_REQUEST;
   if (w->Stream)
     return STATUS_INSUFFICIENT_RESOURCES;
-  fmt = stream_format(&w->Adapter->Hda, df, &rate);
-  if (!fmt)
+  rate = stream_rate(&w->Adapter->Codec, df);
+  if (!rate)
     return STATUS_INVALID_PARAMETER;
   s = alloc(sizeof *s);
-  if (!s)
+  d = alloc(sizeof *d);
+  if (!s || !d) {
+    if (s)
+      ExFreePool(s);
+    if (d)
+      ExFreePool(d);
     return STATUS_INSUFFICIENT_RESOURCES;
+  }
+  d->lpVtbl = &dma_vtbl;
+  d->Refs = 1;
+  d->Adapter = w->Adapter;
+  __sync_add_and_fetch(&w->Adapter->Refs, 1);
   s->lpVtbl = &stream_vtbl;
   s->Refs = 1;
   s->Wave = w;
-  This->lpVtbl->AddRef(This);
+  s->Dma = d;
   s->State = KSSTATE_STOP;
-  s->Fmt = fmt;
   s->Rate = rate;
   s->Interval = 10;
-  stream_size(s);
+  KeInitializeTimerEx(&s->Timer, NotificationTimer);
+  KeInitializeDpc(&s->Dpc, stream_tick, s);
+  st = stream_setup(s);
+  if (!NT_SUCCESS(st)) {
+    d->lpVtbl->Release((PDMACHANNEL)d);
+    ExFreePool(s);
+    return st;
+  }
+  This->lpVtbl->AddRef(This);
   w->Stream = s;
   *out = (PMINIPORTWAVECYCLICSTREAM)s;
-  *dma = w->Dma;
-  w->Dma->lpVtbl->AddRef(w->Dma);
+  *dma = (PDMACHANNEL)d;
+  d->lpVtbl->AddRef((PDMACHANNEL)d);
   *group = w->ServiceGroup;
   w->ServiceGroup->lpVtbl->AddRef(w->ServiceGroup);
   return STATUS_SUCCESS;
@@ -576,7 +749,7 @@ static NTSTATUS NTAPI prop_level(PPCPROPERTY_REQUEST r) {
   if (r->Verb & KSPROPERTY_TYPE_BASICSUPPORT) {
     KSPROPERTY_STEPPING_LONG range;
     LONG step;
-    level_range(&a->Hda, &range.Bounds.SignedMinimum,
+    level_range(&a->Codec, &range.Bounds.SignedMinimum,
                 &range.Bounds.SignedMaximum, &step);
     range.SteppingDelta = (ULONG)step;
     range.Reserved = 0;
@@ -592,7 +765,7 @@ static NTSTATUS NTAPI prop_level(PPCPROPERTY_REQUEST r) {
       set_level(a, 0, v);
     if (ch != 0)
       set_level(a, 1, v);
-    hda_set_volume(&a->Hda, a->Gain[0], a->Gain[1], a->Mute);
+    codec_set_volume(&a->Codec, a->Gain[0], a->Gain[1], a->Mute);
   } else {
     return STATUS_INVALID_DEVICE_REQUEST;
   }
@@ -610,7 +783,7 @@ static NTSTATUS NTAPI prop_mute(PPCPROPERTY_REQUEST r) {
     *(PBOOL)r->Value = a->Mute;
   } else if (r->Verb & KSPROPERTY_TYPE_SET) {
     a->Mute = *(PBOOL)r->Value != 0;
-    hda_set_volume(&a->Hda, a->Gain[0], a->Gain[1], a->Mute);
+    codec_set_volume(&a->Codec, a->Gain[0], a->Gain[1], a->Mute);
   } else {
     return STATUS_INVALID_DEVICE_REQUEST;
   }
@@ -740,7 +913,58 @@ static const IMiniportTopologyVtbl topo_vtbl = {
     .Init = topo_init,
 };
 
+
 /* ---- The adapter driver ---- */
+
+/* Port class makes our device in AddDevice and calls StartDevice with it;
+   the bus interface comes from the function group's device beneath. */
+#define MAX_DEVICES 8
+static struct {
+  PDEVICE_OBJECT Fdo, Pdo;
+} devices[MAX_DEVICES];
+static ULONG next;
+
+static PDEVICE_OBJECT pdo_of(PDEVICE_OBJECT fdo) {
+  for (ULONG i = 0; i < MAX_DEVICES; i++)
+    if (devices[i].Fdo == fdo)
+      return devices[i].Pdo;
+  return NULL;
+}
+
+/* IRP_MN_QUERY_INTERFACE for the bus interface, to the top of the
+   function group's stack (it passes our device on its way down). */
+static NTSTATUS query_bus(PDEVICE_OBJECT pdo, HDAUDIO_BUS_INTERFACE *bus) {
+  PDEVICE_OBJECT top = IoGetAttachedDeviceReference(pdo);
+  IO_STATUS_BLOCK io;
+  KEVENT done;
+  PIO_STACK_LOCATION sp;
+  NTSTATUS st;
+  PIRP irp;
+  KeInitializeEvent(&done, NotificationEvent, FALSE);
+  irp = IoBuildSynchronousFsdRequest(IRP_MJ_PNP, top, NULL, 0, NULL, &done,
+                                     &io);
+  if (!irp) {
+    ObDereferenceObject(top);
+    return STATUS_INSUFFICIENT_RESOURCES;
+  }
+  irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+  sp = IoGetNextIrpStackLocation(irp);
+  sp->MinorFunction = IRP_MN_QUERY_INTERFACE;
+  sp->Parameters.QueryInterface.InterfaceType = &GUID_HDAUDIO_BUS_INTERFACE;
+  sp->Parameters.QueryInterface.Size = sizeof *bus;
+  sp->Parameters.QueryInterface.Version = 0x0100;
+  sp->Parameters.QueryInterface.Interface = (PINTERFACE)bus;
+  sp->Parameters.QueryInterface.InterfaceSpecificData = NULL;
+  st = IoCallDriver(top, irp);
+  if (st == STATUS_PENDING) {
+    KeWaitForSingleObject(&done, Executive, KernelMode, FALSE, NULL);
+    st = io.Status;
+  }
+  ObDereferenceObject(top);
+  if (NT_SUCCESS(st) && (!bus->TransferCodecVerbs || !bus->Context))
+    st = STATUS_NOT_SUPPORTED;
+  return st;
+}
 
 /* Make a port of class clsid with miniport, and register it as name. */
 static NTSTATUS subdevice(PDEVICE_OBJECT dev, PIRP irp,
@@ -763,67 +987,36 @@ static NTSTATUS subdevice(PDEVICE_OBJECT dev, PIRP irp,
 
 static NTSTATUS NTAPI StartDevice(PDEVICE_OBJECT dev, PIRP irp,
                                   PRESOURCELIST resources) {
-  PCM_PARTIAL_RESOURCE_DESCRIPTOR mem;
-  DEVICE_DESCRIPTION dd;
+  PDEVICE_OBJECT pdo = pdo_of(dev);
   ADAPTER *a;
   WAVE *w = NULL;
   TOPO *t = NULL;
   PPORT wave_port = NULL, topo_port = NULL;
+  UCHAR cad = 0, nid = 0;
   NTSTATUS st;
 
-  mem = resources->lpVtbl->FindTranslatedEntry(resources,
-                                               CmResourceTypeMemory, 0);
-  if (!mem || !resources->lpVtbl->NumberOfEntriesOfType(
-                  resources, CmResourceTypeInterrupt))
-    return STATUS_DEVICE_CONFIGURATION_ERROR;
+  if (!pdo)
+    return STATUS_NO_SUCH_DEVICE;
   a = alloc(sizeof *a);
   if (!a)
     return STATUS_INSUFFICIENT_RESOURCES;
   a->Refs = 1;
-  a->Hda.RegsLength = mem->u.Memory.Length;
-  a->Hda.Regs = MmMapIoSpace(mem->u.Memory.Start, mem->u.Memory.Length,
-                             MmNonCached);
-  if (!a->Hda.Regs) {
-    st = STATUS_INSUFFICIENT_RESOURCES;
+  st = query_bus(pdo, &a->Bus);
+  if (!NT_SUCCESS(st)) {
+    a->Bus.InterfaceDereference = NULL;
     goto out;
   }
-
-  /* One page for the CORB, RIRB and BDL. */
-  RtlZeroMemory(&dd, sizeof dd);
-  dd.Version = DEVICE_DESCRIPTION_VERSION;
-  dd.Master = TRUE;
-  dd.ScatterGather = TRUE;
-  dd.Dma32BitAddresses = TRUE;
-  dd.InterfaceType = PCIBus;
-  dd.MaximumLength = PAGE_SIZE;
-  st = PcNewDmaChannel(&a->RingsDma, NULL, NonPagedPool, &dd, dev);
-  if (!NT_SUCCESS(st))
-    goto out;
-  st = a->RingsDma->lpVtbl->AllocateBuffer(a->RingsDma, PAGE_SIZE, NULL);
-  if (!NT_SUCCESS(st))
-    goto out;
-  a->Hda.Rings = a->RingsDma->lpVtbl->SystemAddress(a->RingsDma);
-  a->Hda.RingsPhys = dma_phys(a->RingsDma);
-
-  st = hda_init(&a->Hda);
+  a->Bus.GetResourceInformation(a->Bus.Context, &cad, &nid);
+  a->Codec.Verb = bus_verb;
+  a->Codec.VerbContext = a;
+  a->Codec.Cad = cad;
+  a->Codec.AfgNid = nid;
+  st = codec_probe(&a->Codec);
   if (!NT_SUCCESS(st))
     goto out;
   set_level(a, 0, 0);
   set_level(a, 1, 0);
-  hda_set_volume(&a->Hda, a->Gain[0], a->Gain[1], FALSE);
-
-  st = PcNewInterruptSync(&a->Sync, NULL, resources, 0,
-                          InterruptSyncModeNormal);
-  if (!NT_SUCCESS(st))
-    goto out;
-  st = a->Sync->lpVtbl->RegisterServiceRoutine(a->Sync, isr, a, FALSE);
-  if (NT_SUCCESS(st))
-    st = a->Sync->lpVtbl->Connect(a->Sync);
-  if (!NT_SUCCESS(st)) {
-    a->Sync->lpVtbl->Release(a->Sync);
-    a->Sync = NULL;
-    goto out;
-  }
+  codec_set_volume(&a->Codec, a->Gain[0], a->Gain[1], FALSE);
 
   t = alloc(sizeof *t);
   w = alloc(sizeof *w);
@@ -863,7 +1056,20 @@ out:
 }
 
 static NTSTATUS NTAPI AddDevice(PDRIVER_OBJECT driver, PDEVICE_OBJECT pdo) {
-  return PcAddAdapterDevice(driver, pdo, StartDevice, 2, 0);
+  NTSTATUS st = PcAddAdapterDevice(driver, pdo, StartDevice, 2, 0);
+  if (!NT_SUCCESS(st))
+    return st;
+  /* The device port class just made is the newest of the driver's. */
+  for (ULONG i = 0; i < MAX_DEVICES; i++)
+    if (!devices[i].Fdo || devices[i].Pdo == pdo) {
+      devices[i].Fdo = driver->DeviceObject;
+      devices[i].Pdo = pdo;
+      return st;
+    }
+  /* Full: the oldest entries are of devices long started. */
+  devices[next % MAX_DEVICES].Fdo = driver->DeviceObject;
+  devices[next++ % MAX_DEVICES].Pdo = pdo;
+  return st;
 }
 
 NTSTATUS NTAPI DriverEntry(PDRIVER_OBJECT driver, PUNICODE_STRING path) {

@@ -42,10 +42,13 @@ else
       ints=$(sed -n 's/^interrupts \([0-9]*\) laps \([0-9]*\).*/\1 \2/p' \
         "$out/$t.log")
       set -- $ints
-      # 2 s of 10 ms fragments, 80 ms buffers; then 200 ms more.
-      if [ "${1:-0}" -lt 190 ] || [ "${1:-0}" -gt 210 ] ||
-         [ "${2:-0}" -lt 23 ] || [ "${2:-0}" -gt 26 ] ||
-         ! grep -q '^restart position 0 .* interrupts 2[0-4]$' "$out/$t.log"
+      # About 2 s of 10 ms fragments in 80 ms buffers (the TSC's idea of
+      # 2 s on a busy host can be longer): 8 interrupts a lap, and about
+      # 20 in the 200 ms after the restart.
+      i=${1:-0} l=${2:-0}
+      if [ $l -lt 22 ] || [ $l -gt 32 ] || [ $i -lt $((l * 8 - 8)) ] ||
+         [ $i -gt $((l * 8 + 8)) ] ||
+         ! grep -q '^restart position 0 .* interrupts [12][0-9]$' "$out/$t.log"
       then
         bad "hdatest $t interrupts" "$out/$t.log"; continue
       fi

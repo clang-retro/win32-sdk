@@ -1,0 +1,56 @@
+; hdaudbus.inf: installs hdaudbus.sys, the bus driver for Intel High
+; Definition Audio controllers, on Windows 98, 98 SE and ME. It finds the
+; codecs' function groups and makes a device of each: HDAUDIO\FUNC_01 for
+; audio, which hdaudio.inf installs hdaudio.sys on, and HDAUDIO\FUNC_02
+; for a modem, which a modem driver of its own takes (modem/hdamodem.inf
+; is a sample). Put it on a disk with hdaudbus.sys and point the Add New
+; Hardware wizard (or Update Driver in Device Manager) at it.
+
+[Version]
+Signature="$CHICAGO$"
+Class=System
+ClassGUID={4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider=%Provider%
+DriverVer=11/18/2026,1.0.0.0
+
+[SourceDisksNames]
+1=%Disk%,,,
+
+[SourceDisksFiles]
+hdaudbus.sys=1
+
+[DestinationDirs]
+DefaultDestDir=10,system32\drivers
+
+[Manufacturer]
+%Provider%=Models
+
+; Intel's controllers (QEMU's intel-hda is the ICH6 one, ich9-intel-hda
+; the ICH9 one), then any PCI audio device of the HDA class (04 03).
+[Models]
+%Bus.Desc%=Bus,PCI\VEN_8086&DEV_2668
+%Bus.Desc%=Bus,PCI\VEN_8086&DEV_27D8
+%Bus.Desc%=Bus,PCI\VEN_8086&DEV_269A
+%Bus.Desc%=Bus,PCI\VEN_8086&DEV_284B
+%Bus.Desc%=Bus,PCI\VEN_8086&DEV_293E
+%Bus.Desc%=Bus,PCI\VEN_8086&DEV_293F
+%Bus.Desc%=Bus,PCI\VEN_8086&DEV_3A3E
+%Bus.Desc%=Bus,PCI\VEN_8086&DEV_3A6E
+%Bus.Desc%=Bus,PCI\VEN_8086&DEV_811B
+%Bus.Desc%=Bus,PCI\CC_0403
+
+[Bus]
+CopyFiles=Bus.Files
+AddReg=Bus.AddReg
+
+[Bus.Files]
+hdaudbus.sys
+
+[Bus.AddReg]
+HKR,,DevLoader,,*ntkern
+HKR,,NTMPDriver,,hdaudbus.sys
+
+[Strings]
+Provider="clang-retro"
+Disk="hdaudio driver disk"
+Bus.Desc="High Definition Audio Controller"

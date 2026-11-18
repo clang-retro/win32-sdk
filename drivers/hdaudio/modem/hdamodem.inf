@@ -1,0 +1,43 @@
+; hdamodem.inf: installs hdamodem.sys, the sample modem function driver,
+; on the modem function group (HDAUDIO\FUNC_02) that hdaudbus.sys finds,
+; on Windows 98, 98 SE and ME. It is a skeleton that sets up its DMA
+; engines and logs to the debugger, so it goes in the System class; a
+; real soft modem's INF is a Modem class one, with Unimodem's settings.
+
+[Version]
+Signature="$CHICAGO$"
+Class=System
+ClassGUID={4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider=%Provider%
+DriverVer=11/18/2026,1.0.0.0
+
+[SourceDisksNames]
+1=%Disk%,,,
+
+[SourceDisksFiles]
+hdamodem.sys=1
+
+[DestinationDirs]
+DefaultDestDir=10,system32\drivers
+
+[Manufacturer]
+%Provider%=Models
+
+[Models]
+%Modem.Desc%=Modem,HDAUDIO\FUNC_02
+
+[Modem]
+CopyFiles=Modem.Files
+AddReg=Modem.AddReg
+
+[Modem.Files]
+hdamodem.sys
+
+[Modem.AddReg]
+HKR,,DevLoader,,*ntkern
+HKR,,NTMPDriver,,hdamodem.sys
+
+[Strings]
+Provider="clang-retro"
+Disk="hdamodem driver disk"
+Modem.Desc="High Definition Audio Modem (sample)"

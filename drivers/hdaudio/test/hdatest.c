@@ -112,7 +112,9 @@ static void pci_write(ULONG bus, ULONG dev, ULONG fn, ULONG reg, ULONG v) {
 }
 
 static HDA hda;
-static UCHAR rings[4096] __attribute__((aligned(4096)));
+static HDA_CODEC codec;
+static HDA_FUNCTION fns[8];
+static UCHAR rings[HDA_RINGS_SIZE] __attribute__((aligned(4096)));
 #define BUFSIZE (8 * 1920) /* 8 fragments of 10 ms */
 static short buffer[BUFSIZE / 2] __attribute__((aligned(128)));
 static const short sine[48] = {
@@ -127,8 +129,16 @@ static void quit(int code) {
   outb(0xF4, (UCHAR)code); /* isa-debug-exit: QEMU exits with code*2+1 */
 }
 
+static ULONG verb(PVOID context, ULONG v) { return hda_verb(context, v); }
+
+static void fail(const char *what) {
+  puts_(what);
+  putc_('\n');
+  quit(1);
+}
+
 int main(void) {
-  ULONG bar = 0, irqs = 0, laps = 0, last = 0;
+  ULONG bar = 0, irqs = 0, laps = 0, last = 0, nfns = 0;
   calibrate();
   for (ULONG dev = 0; dev < 32 && !bar; dev++)
     for (ULONG fn = 0; fn < 8 && !bar; fn++) {
@@ -145,104 +155,136 @@ int main(void) {
         putc_('\n');
       }
     }
-  if (!bar) {
-    puts_("no HDA controller\n");
-    quit(1);
-    return 1;
-  }
+  if (!bar)
+    return fail("no HDA controller"), 1;
   hda.Regs = (volatile UCHAR *)bar;
   hda.Rings = rings;
   hda.RingsPhys = (ULONG)rings;
   NTSTATUS st = hda_init(&hda);
   puts_("init ");
   hex((ULONG)st, 8);
+  puts_(" version ");
+  hex(hda.Version, 4);
   puts_(" streams in ");
   dec(hda.InputStreams);
   puts_(" out ");
   dec(hda.OutputStreams);
-  puts_("\ncodec ");
-  dec(hda.Cad);
-  puts_(" vendor ");
-  hex(hda.Vendor, 8);
-  puts_(" afg ");
-  dec(hda.AfgNid);
-  puts_("\npath");
-  for (ULONG i = 0; i < hda.PathLength; i++)
-    putc_(' '), dec(hda.Path[i].Nid);
-  puts_("\ndac ");
-  dec(hda.Dac);
-  puts_(" pcm ");
-  hex(hda.DacPcm, 8);
-  puts_(" pins");
-  for (ULONG i = 0; i < hda.PinCount; i++)
-    putc_(' '), dec(hda.Pins[i]);
-  puts_("\nvolume ");
-  dec(hda.VolNid);
-  puts_(hda.VolIsOutput ? " out " : " in ");
-  hex(hda.VolCaps, 8);
-  puts_(" mute ");
-  dec(hda.MuteNid);
+  puts_(" codecs ");
+  hex(hda.Codecs, 4);
   putc_('\n');
-  if (!NT_SUCCESS(st)) {
-    quit(1);
-    return 1;
+  if (!NT_SUCCESS(st))
+    return fail("init failed"), 1;
+
+  /* The function groups, as the bus driver makes devices of them. */
+  for (ULONG cad = 0; cad < 15; cad++)
+    if (hda.Codecs & (1u << cad))
+      nfns += codec_functions(verb, &hda, cad, fns + nfns, 8 - nfns);
+  codec.Verb = verb;
+  codec.VerbContext = &hda;
+  for (ULONG i = 0; i < nfns; i++) {
+    puts_("function codec ");
+    dec(fns[i].Cad);
+    puts_(" node ");
+    dec(fns[i].Nid);
+    puts_(" type ");
+    hex(fns[i].Type, 2);
+    puts_(" HDAUDIO\\FUNC_");
+    hex(fns[i].Type, 2);
+    puts_("&VEN_");
+    hex(fns[i].Vendor >> 16, 4);
+    puts_("&DEV_");
+    hex(fns[i].Vendor & 0xFFFF, 4);
+    puts_("&SUBSYS_");
+    hex(fns[i].Subsystem, 8);
+    puts_("&REV_");
+    hex(fns[i].Revision >> 16, 4);
+    putc_('\n');
+    if ((fns[i].Type & 0xFF) == HDA_FG_AUDIO && !codec.AfgNid) {
+      codec.Cad = fns[i].Cad;
+      codec.AfgNid = fns[i].Nid;
+    }
   }
+  if (!codec.AfgNid)
+    return fail("no audio function group"), 1;
+  st = codec_probe(&codec);
+  puts_("path");
+  for (ULONG i = 0; i < codec.PathLength; i++)
+    putc_(' '), dec(codec.Path[i].Nid);
+  puts_("\ndac ");
+  dec(codec.Dac);
+  puts_(" pcm ");
+  hex(codec.DacPcm, 8);
+  puts_(" pins");
+  for (ULONG i = 0; i < codec.PinCount; i++)
+    putc_(' '), dec(codec.Pins[i]);
+  puts_("\nvolume ");
+  dec(codec.VolNid);
+  puts_(codec.VolIsOutput ? " out " : " in ");
+  hex(codec.VolCaps, 8);
+  puts_(" mute ");
+  dec(codec.MuteNid);
+  putc_('\n');
+  if (!NT_SUCCESS(st))
+    return fail("no output path"), 1;
 
   for (ULONG i = 0; i < BUFSIZE / 4; i++)
     buffer[2 * i] = buffer[2 * i + 1] = sine[i % 48];
-  ULONG steps = HDA_AMPCAP_STEPS(hda.VolCaps);
-  ULONG zero = HDA_AMPCAP_OFFSET(hda.VolCaps);
+  ULONG steps = HDA_AMPCAP_STEPS(codec.VolCaps);
+  ULONG zero = HDA_AMPCAP_OFFSET(codec.VolCaps);
   if (zero > steps)
     zero = steps;
-  hda_set_volume(&hda, zero, zero, FALSE);
-  st = hda_stream_start(&hda, (ULONG)buffer, BUFSIZE, 1920,
-                        HDA_FMT_48K | HDA_FMT_16BIT | HDA_FMT_STEREO);
-  if (!NT_SUCCESS(st)) {
-    puts_("stream start failed\n");
-    quit(1);
-    return 1;
-  }
-  hda_stream_run(&hda, TRUE);
+  codec_set_volume(&codec, zero, zero, FALSE);
+  USHORT fmt = hda_format(48000, 16, 2);
+  HDA_ENGINE *e = hda_engine_alloc(&hda, TRUE);
+  HDA_ENGINE *e2 = hda_engine_alloc(&hda, TRUE);
+  if (!e || !e2 || e->Tag == e2->Tag || fmt != 0x0011)
+    return fail("engine or format"), 1;
+  hda_engine_free(&hda, e2);
+  st = hda_engine_setup(&hda, e, (ULONG)buffer, BUFSIZE, 1920, TRUE, fmt);
+  if (!NT_SUCCESS(st))
+    return fail("stream setup failed"), 1;
+  codec_stream(&codec, e->Tag, fmt);
+  hda_engine_run(&hda, e, TRUE);
   unsigned long long t0 = rdtsc(), us = 0;
   int phase = 0;
   while ((us = (rdtsc() - t0) / tsc_per_us) < 2000000) {
-    if (hda_interrupt(&hda))
+    if (hda_interrupt(&hda, NULL) & (1u << e->Index))
       irqs++;
-    ULONG pos = hda_stream_position(&hda);
+    ULONG pos = hda_engine_position(&hda, e);
     if (pos < last)
       laps++;
     last = pos;
     if (phase == 0 && us >= 1000000) {
-      hda_set_volume(&hda, zero, zero, TRUE);
+      codec_set_volume(&codec, zero, zero, TRUE);
       phase = 1;
     } else if (phase == 1 && us >= 1500000) {
-      hda_set_volume(&hda, zero / 2, zero / 2, FALSE);
+      codec_set_volume(&codec, zero / 2, zero / 2, FALSE);
       phase = 2;
     }
   }
-  hda_stream_reset(&hda);
+  hda_engine_reset(&hda, e);
   puts_("interrupts ");
   dec(irqs);
   puts_(" laps ");
   dec(laps);
   puts_(" position after reset ");
-  dec(hda_stream_position(&hda));
+  dec(hda_engine_position(&hda, e));
   /* Again from the start, as after KSSTATE_STOP: the position must start
      at 0 again and the interrupts come again. */
-  hda_stream_start(&hda, (ULONG)buffer, BUFSIZE, 1920,
-                   HDA_FMT_48K | HDA_FMT_16BIT | HDA_FMT_STEREO);
+  hda_engine_setup(&hda, e, (ULONG)buffer, BUFSIZE, 1920, TRUE, fmt);
   puts_("\nrestart position ");
-  dec(hda_stream_position(&hda));
-  hda_stream_run(&hda, TRUE);
+  dec(hda_engine_position(&hda, e));
+  hda_engine_run(&hda, e, TRUE);
   KeStallExecutionProcessor(15000);
   puts_(" after 15 ms ");
-  dec(hda_stream_position(&hda));
+  dec(hda_engine_position(&hda, e));
   irqs = 0;
   t0 = rdtsc();
   while ((rdtsc() - t0) / tsc_per_us < 200000)
-    if (hda_interrupt(&hda))
+    if (hda_interrupt(&hda, NULL) & (1u << e->Index))
       irqs++;
-  hda_stream_reset(&hda);
+  hda_engine_free(&hda, e);
+  codec_stream(&codec, 0, 0);
   puts_(" interrupts ");
   dec(irqs);
   puts_("\ndone\n");
