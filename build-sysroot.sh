@@ -63,6 +63,8 @@ win-vista-x64)
 *)
   echo "unknown sysroot $name" >&2; exit 1 ;;
 esac
+# Declarations in the API headers corrected to match the Windows SDK's.
+sh "$here/scripts/fix-api-headers.sh"
 # Visual C++'s COM support library, for comdef.h and #import. Not for
 # win32-picolibc, whose C library lacks what comdef.h needs (sprintf_s,
 # <new.h>).

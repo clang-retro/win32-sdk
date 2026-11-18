@@ -15,6 +15,7 @@ scripts/build-unicows.sh         adds libunicows to it
 scripts/build-cxx.sh             adds libc++, libc++abi and libunwind (9x to XP)
 scripts/build-modern-sysroot.sh  sysroot for Vista and later, with libc++
 scripts/fix-ddk-headers.sh       fixes mingw-w64's DDK headers in a sysroot
+scripts/fix-api-headers.sh       corrects API header declarations to match the SDK
 scripts/build-idl.sh             adds the .idl files and stdole2.tlb (below)
 idl/stdole2.idl                  the OLE Automation type library's source
 tools/midl.c                     midl, a MIDL-compatible front end for widl
