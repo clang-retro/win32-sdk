@@ -6,7 +6,8 @@
 # is loaded, and a package of one with clanghello.inf gets a catalog. The
 # NT 4.0 build is checked as a WDM driver for Windows 98 and ME too
 # (check-imports.py --wdm), as is wdmaudio.c, a WDM audio driver (port
-# class) for 98, 98 SE and ME, and miniport.c is built as a SCSI miniport
+# class) for 98, 98 SE and ME, usbdrv.c (USB, -lusbd9x, and its .SYM
+# file) and hidparse.c (HID report parsing), and miniport.c is built as a SCSI miniport
 # for Windows 9x (check-imports.py --miniport).
 #
 #   CFGDIR   folder with clang and the config files (a toolchain package's
@@ -174,6 +175,52 @@ if [ -f "$CFGDIR/nt4-ddk.cfg" ]; then
     bad "wdmaudio-me check-imports" wdmaudio-me.chk
   else
     pass=$((pass + 1))
+  fi
+fi
+# WDM USB and HID drivers for 98, 98 SE and ME: usbdrv.c with -lusbd9x
+# (and with mingw-w64's -lusbd, which 98 SE's USBD.SYS cannot load), and
+# hidparse.c, also with -DSE_ONLY, which only 98 SE and ME can load.
+wdm_check() { # NAME FILE.sys VERSIONS-THAT-LOAD-IT VERSIONS-THAT-DO-NOT
+  t=$1 sys=$2
+  ok=1
+  for v in $3; do
+    ${PYTHON:-python3} "$check" --wdm $v $sys >>$t.chk 2>&1 || ok=0
+  done
+  for v in $4; do
+    ! ${PYTHON:-python3} "$check" --wdm $v $sys >>$t.chk 2>&1 || ok=0
+  done
+  if [ $ok = 1 ]; then pass=$((pass + 1)); else bad "$t wdm" $t.chk; fi
+}
+if [ -f "$CFGDIR/nt4-ddk.cfg" ]; then
+  for t in usbdrv:-lusbd9x:"98 98se me": usbdrv-mingw:-lusbd:me:"98 98se" \
+           hidparse:-lhidparse:"98 98se me": \
+           "hidparse-se:-lhidparse -DSE_ONLY:98se me:98"; do
+    n=${t%%:*} r=${t#*:}
+    args=${r%%:*} r=${r#*:}
+    yes=${r%%:*} no=${r#*:}
+    rm -f $n.chk
+    if "$CFGDIR/clang" --config="$CFGDIR/nt4-ddk.cfg" -O2 -Wall -Werror \
+         "$here/${n%%-*}.c" $args -o $n.sys >$n.log 2>&1; then
+      wdm_check $n $n.sys "$yes" "$no"
+    else
+      bad "$n build" $n.log
+    fi
+  done
+fi
+# usbdrv.sys's .SYM file (mapsym.py, from its COFF symbol table): its
+# functions, the static one too, in .text.
+if [ -f usbdrv.sys ]; then
+  if ${PYTHON:-python3} "$(dirname "$check")/mapsym.py" usbdrv.sys \
+       -o usbdrv.sym >usbdrv-sym.log 2>&1 &&
+     ${PYTHON:-python3} "$(dirname "$check")/mapsym.py" --dump usbdrv.sym \
+       >>usbdrv-sym.log 2>&1 &&
+     grep -q "^module USBDRV$" usbdrv-sym.log &&
+     grep -q "^segment 1 .text:" usbdrv-sym.log &&
+     grep -q "^  0001:[0-9a-f]* _DriverEntry@8$" usbdrv-sym.log &&
+     grep -q "^  0001:[0-9a-f]* _Unload@4$" usbdrv-sym.log; then
+    pass=$((pass + 1))
+  else
+    bad "usbdrv sym" usbdrv-sym.log
   fi
 fi
 # SCSI miniports for Windows 9x (win95-miniport.cfg): miniport.c at each

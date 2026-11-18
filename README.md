@@ -610,6 +610,42 @@ adapter driver that makes a topology port when its device starts, in C.
 includes) compile in kernel mode, where nothing defines the `TCHAR` of
 its `TRANSPORTBASICPARMS`.
 
+USB drivers import USBD.SYS. Link them with `-lusbd9x`, which
+`build-vxd.sh` makes from `tools/usbd9x-exports.txt`, not mingw-w64's
+`-lusbd`. 98's and 98 SE's USBD.SYS export
+`USBD_CreateConfigurationRequestEx`, `USBD_ParseConfigurationDescriptorEx`
+and `USBD_ParseDescriptors` only by their decorated names
+(`_USBD_CreateConfigurationRequestEx@8`). The 98 DDK's `usbd.lib` imports
+them by those names, and so does `-lusbd9x`; ME and Windows 2000 and
+later export them too. mingw-w64's library imports them undecorated, so
+the driver loads only on ME and later:
+
+```sh
+clang --config=nt4-ddk.cfg -O2 myusb.c -lusbd9x -o myusb.sys
+python3 share/clang-dos/check-imports.py --wdm 98 myusb.sys
+```
+
+HID drivers link mingw-w64's `-lhidparse` and `-lhidclass` (include
+`<hidusage.h>` before `<hidpi.h>`). mingw-w64 has no `<hidport.h>`, so a
+HID minidriver has to declare `HID_MINIDRIVER_REGISTRATION` itself.
+`wdm9x-exports.txt` also has the functions of USBD.SYS, HIDCLASS.SYS and
+HIDPARSE.SYS, from the 98 DDK's libraries and the drivers of 98 SE and
+ME. 98 SE added `HidP_InitializeReportForID`, `HidP_GetExtendedAttributes`
+and two more. For these drivers and port class, `--wdm 98se` goes by
+98 SE's own driver: it dropped some of 98's functions, such as KS.SYS's
+`KsQuerySoftwareBusInterface`. `tests/ddk/usbdrv.c` is a USB client
+driver and `tests/ddk/hidparse.c` parses HID reports.
+
+`tools/mapsym.py` writes a `.SYM` file (MAPSYM's format), which WDEB386
+and SoftICE load. For a driver, it reads the symbols from the image's
+COFF symbol table, which the linker keeps unless `-s` strips it. That
+includes the static functions and variables, listed by section:
+
+```sh
+python3 share/clang-dos/mapsym.py myusb.sys      # writes myusb.sym
+python3 share/clang-dos/mapsym.py --dump myusb.sym
+```
+
 `tests/ddk/hello.c` is a small driver that makes `\Device\ClangHello` and
 answers an IOCTL with a 64-bit computation and whether its `__except`
 caught a division by zero (with a `__finally` inside);
@@ -891,6 +927,47 @@ stores its return value there. List the services in
 `Sys_Dynamic_Device_Init`. That calls the VMM's `_Register_Win32_Services`,
 which fills in the DDB's Win32 service table.
 
+More of what `<vxd.h>` has, each with a sample in `vxd/`:
+
+- **DeviceIoControl that finishes later** (`vxd/async.c`, called by
+  `vxd/asyncc.c`). When a program passes an OVERLAPPED, the VxD can lock
+  the output buffer and the OVERLAPPED with `vxd_lock_global` (global
+  addresses, valid in any context). It then returns `VXD_DIOC_PENDING`, so
+  `DeviceIoControl` fails with `ERROR_IO_PENDING`. Later, from a time-out,
+  an event or an interrupt, the VxD writes the answer, calls
+  `VWIN32_DIOCCompletion(overlapped, bytes)` (VWIN32's
+  `VWIN32_DIOCCompletionRoutine`) and unlocks both with
+  `vxd_unlock_global`. The program's `GetOverlappedResult` then returns
+  with the byte count.
+- **Hooking a service** (`vxd/hook.c`). `vxd_hook_service(VXDSVC_Name,
+  Hook, &prev)` makes every call to a VMM or VxD service go to `Hook`,
+  and `vxd_unhook_service` undoes that (95 and later; a dynamic VxD must
+  unhook before it unloads). `VXD_HOOK_REG(Hook, Fn, prev)` makes a hook
+  for a register service. It calls `int Fn(struct vxd_regs *)`, which
+  returns `VXD_HOOK_PASS` to go on to the previous handler, or
+  `VXD_HOOK_DONE` or `VXD_HOOK_FAIL` to return to the caller.
+  `VXD_HOOK_C(Hook, Fn, prev)` makes a hook for a C service. Both give the
+  hook the prologue the VMM uses to chain hooks (`jmp short`, then
+  `jmp [prev]`).
+- **Services that take their parameters on the stack**, such as
+  `IOS_Register`. `VXD_STACK_SERVICE(fn, Name)` defines `fn` as a stub
+  that jumps to the service (`int 20h` with the VxDJmp bit), so a
+  prototype and a call are all it needs. `vxd/iospdr.c` uses it.
+- **Calling real-mode code in the current VM** (`vxd/bios.c`).
+  `vxd_exec_int(n, &regs)` saves the VM's registers, runs software
+  interrupt `n` there with nested execution, with `struct vxd_int_regs`
+  in and out, and restores the registers. `bios.c` reads the base memory
+  size with INT 12h and the tick count with INT 1Ah.
+- **Debug output.** With `-DVXD_DEBUG`, `Trace_Out("text")` and
+  `Debug_Printf("fmt", ...)` print to the debugger (WDEB386, SoftICE or
+  the debug VMM's terminal). `VXD_ASSERT(e)` prints the file and line and
+  breaks into the debugger, if one is installed, when `e` is false.
+  Without `-DVXD_DEBUG` they compile to nothing.
+
+`vxd-link.py --sym HELLO.SYM` also writes a `.SYM` file for WDEB386 and
+SoftICE. `tools/mapsym.py` makes it from JWlink's map file, with the public
+and static symbols of each object.
+
 `vxd-link.py` writes a dynamic VxD by default, the kind Win32 programs
 load with `CreateFile("\\\\.\\C:\\PATH\\HELLO.VXD", ...)` and call
 with `DeviceIoControl`. `--static` writes one that SYSTEM.INI loads with
@@ -909,11 +986,12 @@ pageable code. `vxd/provider.c` provides services, V86 and PM entry
 points and two Win32 services. `client.c`, `vxd/apitest.c` (a DOS
 program) and `vxd/w32svc.c` call it, and all three ran on Windows 98 SE.
 `CFGDIR=~/clang-dos/bin sh vxd/run-tests.sh` builds `hello.c` as a
-dynamic, static and Windows 3.1 VxD, and `services.c` and `provider.c` as
-dynamic ones, at `-O0`, `-O2` and `-Os`, and checks each build. No emulator
-runs VxDs, so with `WIN9X_RUN` set to a command that runs `CLIENT.EXE` on
-a real Windows 9x, the dynamic ones are loaded too. Both have run on
-Windows 98 SE.
+dynamic, static and Windows 3.1 VxD, and `services.c`, `provider.c`,
+`async.c`, `hook.c` and `bios.c` as dynamic ones, at `-O0`, `-O2` and
+`-Os`, and checks each build. No emulator runs VxDs, so with `WIN9X_RUN`
+set to a command that runs `CLIENT.EXE` on a real Windows 9x, the dynamic
+ones are loaded too. `hello.c` and `services.c` have run on Windows 98
+SE; `async.c`, `hook.c` and `bios.c` have not yet.
 
 ## Redistributing the SDK
 

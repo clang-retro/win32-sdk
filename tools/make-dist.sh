@@ -10,8 +10,9 @@
 #                                   picolibc one, each with share/licenses/
 #   share/clang-dos/                check-imports.py, msvcrt-versions.txt,
 #                                   kernel-versions.txt,
-#                                   wdm9x-exports.txt, vxd-link.py,
-#                                   drvsign.py,
+#                                   wdm9x-exports.txt,
+#                                   scsiport9x-exports.txt, vxd-link.py,
+#                                   mapsym.py, drvsign.py,
 #                                   vxd-check.py, build-modern-sysroot.sh
 #                                   (and except3.S, its libntseh.a),
 #                                   README
@@ -44,6 +45,7 @@ else
 fi
 cp "$here/tools/check-imports.py" "$here/tools/msvcrt-versions.txt" \
   "$here/tools/kernel-versions.txt" "$here/tools/wdm9x-exports.txt" \
+  "$here/tools/scsiport9x-exports.txt" "$here/tools/mapsym.py" \
   "$here/scripts/build-modern-sysroot.sh" \
   "$here/scripts/fix-ddk-headers.sh" "$here/kernel/except3.S" \
   "$here/tools/vxd-link.py" "$here/tools/drvsign.py" \

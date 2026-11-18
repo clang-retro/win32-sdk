@@ -3,8 +3,10 @@
 # and a Windows 3.1 VxD, services.c's (VMM services, and init and pageable
 # code and data) and provider.c's (services and entry points of its own)
 # at each level as dynamic ones, linktest.c's, portdrv.c's (a VCOMM port
-# driver) in C99, C17 and C23, iospdr.c's (an IOS port driver) at each
-# level, the subsystem headers (compiled, and their layouts checked), and
+# driver) in C99, C17 and C23, iospdr.c's (an IOS port driver) and
+# async.c's (a DeviceIoControl that finishes later), hook.c's (service
+# hooks, and its .SYM file) and bios.c's (nested execution; also with
+# -DVXD_DEBUG) at each level, the subsystem headers (compiled, and their layouts checked), and
 # msddk.c's (msddk31.c's for the 3.1 one) with each ms-*-vxd.cfg (import-ms-sdk.py's VxD kits) in CFGDIR,
 # and check each one with vxd-check.py. No emulator runs VxDs: with WIN9X_RUN,
 # a command that takes a folder holding a VxD and CLIENT.EXE, runs
@@ -62,8 +64,8 @@ vxd() { # NAME SRC CFG CHECK LINKFLAGS -- CFLAGS...
   pass=$((pass + 1))
 }
 for opt in O0 O2 Os; do
-  vxd svc-$opt "$here/services.c" win95-vxd.cfg --dynamic "--name SVCTEST" \
-    -- -$opt -Wall -Werror
+  vxd svc-$opt "$here/services.c" win95-vxd.cfg --dynamic \
+    "--name SVCTEST --sym svc-$opt.sym" -- -$opt -Wall -Werror
   # Each kind of object, as services.c asks for them.
   for k in "init code" "pageable code" "init data" "pageable data"; do
     grep -q "$k" svc-$opt.chk 2>/dev/null ||
@@ -87,6 +89,43 @@ done
 for std in c99 c17 c23; do
   vxd portdrv-$std "$here/portdrv.c" win95-vxd.cfg --dynamic "--name PORTDRV" \
     -- -O2 -std=$std -Wall -Wextra -Werror
+done
+# A VxD whose DeviceIoControl finishes later (VXD_DIOC_PENDING and
+# VWIN32_DIOCCompletion), and asyncc.c, the program that calls it.
+for opt in O0 O2 Os; do
+  vxd async-$opt "$here/async.c" win95-vxd.cfg --dynamic "--name ASYNC" \
+    -- -$opt -Wall -Wextra -Werror
+done
+if "$CFGDIR/clang" --config="$CFGDIR/win98.cfg" -O2 -Wall -Werror \
+     "$here/asyncc.c" -o asyncc.exe >asyncc.log 2>&1; then
+  pass=$((pass + 1))
+else
+  bad asyncc asyncc.log
+fi
+# A VxD that hooks a register and a C service of the VMM's.
+for opt in O0 O2 Os; do
+  vxd hook-$opt "$here/hook.c" win95-vxd.cfg --dynamic \
+    "--name HOOK --sym hook-$opt.sym" -- -$opt -Wall -Wextra -Werror
+  # Its .SYM file (vxd-link.py --sym): the hooks in the code object, the
+  # DDB and a static variable in the data one.
+  if $PY "$tools/mapsym.py" --dump hook-$opt.sym >hook-$opt.dump 2>&1 &&
+     grep -q "^module HOOK$" hook-$opt.dump &&
+     grep -q "^  0001:[0-9a-f]* _time_hook$" hook-$opt.dump &&
+     grep -q "^  0001:[0-9a-f]* _size_hook$" hook-$opt.dump &&
+     grep -q "^  0002:[0-9a-f]* _time_calls$" hook-$opt.dump &&
+     grep -q "^  0002:00000000 _HOOK_DDB$" hook-$opt.dump; then
+    pass=$((pass + 1))
+  else
+    bad "hook-$opt sym" hook-$opt.dump
+  fi
+done
+# A VxD that calls the BIOS with nested execution, with and without the
+# debug output macros.
+for opt in O0 O2 Os; do
+  vxd bios-$opt "$here/bios.c" win95-vxd.cfg --dynamic "--name BIOS" \
+    -- -$opt -Wall -Wextra -Werror
+  vxd bios-debug-$opt "$here/bios.c" win95-vxd.cfg --dynamic "--name BIOS" \
+    -- -$opt -DVXD_DEBUG -Wall -Wextra -Werror
 done
 # An IOS port driver (.PDR), which IOS_Register()s and answers IOS's async
 # events through <aep.h>, <drp.h>, <ilb.h> and <isp.h>.
@@ -182,6 +221,37 @@ if [ -n "${WIN9X_RUN:-}" ]; then
         pass=$((pass + 1)) ;;
       *) echo "got: $got" >>"$t.err"; bad "$t run" "$t.err" ;;
     esac
+    t=run-async-$opt
+    rm -rf "$t" && mkdir "$t"
+    cp "async-$opt.vxd" "$t/ASYNC.VXD"
+    cp asyncc.exe "$t/CLIENT.EXE"
+    got=$($WIN9X_RUN "$t" 2>"$t.err" | tr -d '\r')
+    case $got in
+      "async pending 1 bytes 13 text async done 1 sync")
+        pass=$((pass + 1)) ;;
+      *) echo "got: $got" >>"$t.err"; bad "$t run" "$t.err" ;;
+    esac
+    t=run-hook-$opt
+    rm -rf "$t" && mkdir "$t"
+    cp "hook-$opt.vxd" "$t/HOOK.VXD"
+    cp client.exe "$t/CLIENT.EXE"
+    got=$($WIN9X_RUN "$t" HOOK.VXD 2>"$t.err" | tr -d '\r')
+    case $got in
+      "hook time 1 heap 1 size 1") pass=$((pass + 1)) ;;
+      *) echo "got: $got" >>"$t.err"; bad "$t run" "$t.err" ;;
+    esac
+    for b in bios bios-debug; do
+      t=run-$b-$opt
+      rm -rf "$t" && mkdir "$t"
+      cp "$b-$opt.vxd" "$t/BIOS.VXD"
+      cp client.exe "$t/CLIENT.EXE"
+      got=$($WIN9X_RUN "$t" BIOS.VXD 2>"$t.err" | tr -d '\r')
+      case $got in
+        "bios mem 6"[0-4][0-9]" ticks 1")
+          pass=$((pass + 1)) ;;
+        *) echo "got: $got" >>"$t.err"; bad "$t run" "$t.err" ;;
+      esac
+    done
   done
 fi
 echo "vxd tests: $pass passed, $fail failed"

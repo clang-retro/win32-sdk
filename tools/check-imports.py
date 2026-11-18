@@ -48,9 +48,11 @@ With --wdm 98, 98se or me, a WDM driver (a .sys built for Windows 2000 and
 later too) is checked for Windows 98, 98 Second Edition or ME, where
 NTKERN.VXD loads it: it must be a native-subsystem image of version 4.x or
 older and import only the ntoskrnl.exe functions that version's wdm.lib
-names, and the PORTCLS.SYS and KS.SYS functions (a WDM audio driver's) its
-port class and kernel streaming drivers export (wdm9x-exports.txt, from
-the 98 and ME DDKs and the drivers of 98 SE and ME).
+names, and the functions of its PORTCLS.SYS and KS.SYS (port class and
+kernel streaming, a WDM audio driver's), USBD.SYS (a USB driver's) and
+HIDCLASS.SYS and HIDPARSE.SYS (a HID driver's) (wdm9x-exports.txt, from
+the 98 and ME DDKs and the drivers of 98 SE and ME). For 98 SE, those
+drivers' own lists count, as 98 SE's dropped some of 98's functions.
 
 The exit status is 1 when something is missing, 0 otherwise.
 """
@@ -511,6 +513,11 @@ def check_wdm(pe, which):
             module, name, *versions = line.split()
             have[(module, name)] = versions
     want = WDM_VERSIONS[which]
+    # 98 SE's own drivers (port class, kernel streaming, USBD, HID) are
+    # listed from its binaries, which dropped some functions of 98's: for
+    # those modules only the 98 SE list counts. The kernel's (NTKERN's)
+    # are 98's.
+    se_modules = {m for (m, _), v in have.items() if "4.10.2222" in v}
     label = "Windows " + WDM_NAMES[max(want)]
     bad = False
     if pe.subsystem != NATIVE:
@@ -522,11 +529,14 @@ def check_wdm(pe, which):
         bad = True
     for dll, name in pe.imports():
         versions = have.get((dll.lower(), name))
+        need = want
+        if "4.10.2222" in want and dll.lower() in se_modules:
+            need = {"4.10.2222"}
         if versions is None:
             print("  error: %s!%s is not one of the WDM functions of %s"
                   % (dll, name, label))
             bad = True
-        elif not want & set(versions):
+        elif not need & set(versions):
             print("  error: %s!%s is in the WDM of %s, not %s"
                   % (dll, name, " and ".join(WDM_NAMES[v] for v in versions),
                      label))

@@ -341,6 +341,16 @@ DWORD _Register_Win32_Services(void *ddb, const void *table);
   __asm__(".text\n.globl _" VXD_STR(NAME) "\n_" VXD_STR(NAME) ":\n"         \
           "  int $0x20\n  .long " VXD_STR(((ID) << 16) | (N) | 0x8000) "\n")
 
+/* A service of Windows that takes its arguments on the stack like a C
+   function, though its name has no underscore (IOS_Register,
+   IOS_Requestor_Service and the like, which <vxdsvc.h> lists as register
+   ones): VXD_STACK_SERVICE(Fn, IOS_Register) defines Fn, a stub that jumps
+   to it, to declare and call as a cdecl function (DWORD Fn(DRP *drp)),
+   which leaves EBX, ESI, EDI and EBP as they were. */
+#define VXD_STACK_SERVICE(FN, NAME)                                          \
+  __asm__(".text\n.globl _" VXD_STR(FN) "\n_" VXD_STR(FN) ":\n"             \
+          "  int $0x20\n  .long " VXD_STR(VXDSVC_##NAME | 0x8000) "\n")
+
 /* A procedure the VMM or a VxD calls with registers (a time-out, an
    event, an I/O trap, a hardware interrupt): VXD_CALLBACK(NAME, FN)
    defines NAME, which saves the registers in a struct vxd_regs, calls
@@ -360,6 +370,50 @@ DWORD _Register_Win32_Services(void *ddb, const void *table);
           "  popl %eax\n  popl %ebx\n  popl %ecx\n  popl %edx\n"            \
           "  popl %esi\n  popl %edi\n  popl %ebp\n"                         \
           "  jnz 1f\n  clc\n  ret\n1:\n  stc\n  ret\n")
+
+/* Hooking another VxD's service (or the VMM's): vxd_hook_service(
+   VXDSVC_Name, Hook, &prev) makes the VMM call Hook instead of the
+   service, from every caller, and stores in PREV the procedure it
+   replaced; vxd_unhook_service(VXDSVC_Name, Hook) undoes it (Windows 95
+   and later), as a dynamic VxD must before it unloads. Each returns 0 if
+   it worked. A hook is made with one of these, which give it the prologue
+   Windows 95's VMM looks for to chain hooks (jmp short over a jmp
+   [PREV]):
+
+   VXD_HOOK_C(Hook, Fn, PREV) for a service called like a C function
+   (_HeapAllocate): Fn is a C function with the service's parameters that
+   calls the previous one, ((DWORD (*)(DWORD, DWORD))PREV)(a, b).
+
+   VXD_HOOK_REG(Hook, Fn, PREV) for a register service: Fn is
+   int Fn(struct vxd_regs *r), which sees the caller's registers and
+   returns VXD_HOOK_PASS to go on to the previous procedure with them (as
+   Fn changed them), or VXD_HOOK_DONE or VXD_HOOK_FAIL to return to the
+   caller with them, the carry flag clear or set.
+
+   PREV is a DWORD variable, and the hook must be in locked code (it is,
+   in .text). vxd/hook.c hooks one of each. */
+#define VXD_HOOK_PASS 0
+#define VXD_HOOK_DONE 1
+#define VXD_HOOK_FAIL 2
+#define VXD_HOOK_PROLOGUE_(NAME, PREV)                                        \
+  ".text\n.p2align 2\n  jmp 1f\n  jmp *_" VXD_STR(PREV) "\n.globl _"       \
+  VXD_STR(NAME) "\n_" VXD_STR(NAME) ":\n1:\n"
+#define VXD_HOOK_C(NAME, FN, PREV)                                           \
+  void NAME(void);                                                           \
+  __asm__(VXD_HOOK_PROLOGUE_(NAME, PREV) "  jmp _" VXD_STR(FN) "\n")
+#define VXD_HOOK_REG(NAME, FN, PREV)                                         \
+  void NAME(void);                                                           \
+  int FN(struct vxd_regs *r);                                                \
+  __asm__(VXD_HOOK_PROLOGUE_(NAME, PREV)                                      \
+          "  pushl %ebp\n  pushl %edi\n  pushl %esi\n  pushl %edx\n"        \
+          "  pushl %ecx\n  pushl %ebx\n  pushl %eax\n"                      \
+          "  movl %esp, %ecx\n  cld\n"                                       \
+          "  pushl %ecx\n  call _" VXD_STR(FN) "\n"                          \
+          "  addl $4, %esp\n  cmpl $1, %eax\n"                              \
+          "  popl %eax\n  popl %ebx\n  popl %ecx\n  popl %edx\n"            \
+          "  popl %esi\n  popl %edi\n  popl %ebp\n"                         \
+          "  jb 2f\n  je 3f\n  stc\n  ret\n3:\n  clc\n  ret\n"             \
+          "2:\n  jmp *_" VXD_STR(PREV) "\n")
 
 /* Where code and data go. A VxD's code and data are locked (always in
    memory) unless marked: init code and data are thrown away once the
@@ -400,6 +454,68 @@ static __inline__ DWORD VMMCALL_Get_Sys_VM_Handle(void) {
   return vm;
 }
 
+/* Nested execution: run a real-mode interrupt (the BIOS, DOS, a TSR) in
+   the current VM, in V86 mode, as if its program had called it.
+   vxd_exec_int(N, &io) saves the VM's client registers
+   (Save_Client_State), starts nested execution (Begin_Nest_V86_Exec),
+   loads IO's registers, runs INT N (Exec_Int), stores what it returned in
+   IO, ends it (End_Nest_Exec) and puts the client registers back
+   (Restore_Client_State). The segment registers are real-mode segments,
+   so a buffer must be in the first megabyte of the VM (V86 memory). Call
+   it where the VMM allows nested execution: a control message such as
+   W32_DEVICEIOCONTROL or Init_Complete, or a V86 or PM API procedure,
+   not at interrupt time. vxd/bios.c does this. For a far call, use the
+   services themselves (Simulate_Far_Call and Resume_Exec between
+   Begin_Nest_V86_Exec and End_Nest_Exec) with EBP set to the client
+   registers. */
+struct vxd_int_regs {
+  DWORD eax, ebx, ecx, edx, esi, edi, ebp;
+  WORD ds, es;
+  DWORD eflags; /* what the interrupt returned (VXD_CLIENT_CARRY) */
+};
+static __inline__ void vxd_exec_int(DWORD n, struct vxd_int_regs *io) {
+  DWORD save[26]; /* a Client_Reg_Struc: 104 bytes */
+  struct vxd_regs r = {0};
+  struct vxd_client_regs *c =
+      *(struct vxd_client_regs **)(VMMCALL_Get_Cur_VM_Handle() + 8);
+  r.edi = (DWORD)save;
+  VXD_CALL(Save_Client_State, &r);
+  r.ebp = (DWORD)c;
+  VXD_CALL(Begin_Nest_V86_Exec, &r);
+  c->eax = io->eax, c->ebx = io->ebx, c->ecx = io->ecx, c->edx = io->edx;
+  c->esi = io->esi, c->edi = io->edi, c->ebp = io->ebp;
+  c->ds = io->ds, c->es = io->es;
+  r.eax = n;
+  r.ebp = (DWORD)c;
+  VXD_CALL(Exec_Int, &r);
+  io->eax = c->eax, io->ebx = c->ebx, io->ecx = c->ecx, io->edx = c->edx;
+  io->esi = c->esi, io->edi = c->edi, io->ebp = c->ebp;
+  io->ds = c->ds, io->es = c->es, io->eflags = c->eflags;
+  r.ebp = (DWORD)c;
+  VXD_CALL(End_Nest_Exec, &r);
+  r.esi = (DWORD)save;
+  VXD_CALL(Restore_Client_State, &r);
+}
+
+static __inline__ int vxd_hook_service(DWORD service, void (*hook)(void),
+                                      DWORD *prev) {
+  struct vxd_regs r = {0};
+  r.eax = service;
+  r.esi = (DWORD)hook;
+  if (VXD_CALL(Hook_Device_Service, &r))
+    return 1;
+  *prev = r.esi;
+  return 0;
+}
+#if VXD_WINVER >= 0x0400
+static __inline__ int vxd_unhook_service(DWORD service, void (*hook)(void)) {
+  struct vxd_regs r = {0};
+  r.eax = service;
+  r.esi = (DWORD)hook;
+  return VXD_CALL(Unhook_Device_Service, &r);
+}
+#endif
+
 /* Get_System_Time: milliseconds since Windows started. */
 static __inline__ DWORD VMMCALL_Get_System_Time(void) {
   struct vxd_regs r = {0};
@@ -414,6 +530,47 @@ static __inline__ void VMMCALL_Out_Debug_String(const char *s) {
   r.esi = (DWORD)s;
   VXD_CALL(Out_Debug_String, &r);
 }
+
+/* Debug output that only debug builds have: with VXD_DEBUG defined
+   (-DVXD_DEBUG), Debug_Printf(fmt, ...) prints to the debugger with the
+   VMM's _Debug_Printf_Service (Windows 95 and later; Windows 3.1 prints
+   only the format), Trace_Out("text") prints a line, and VXD_ASSERT(e)
+   prints the expression, the file and the line if E is false, then
+   breaks into the debugger (int 3) if one is installed. Without
+   VXD_DEBUG they are nothing, and their arguments are not evaluated. A
+   retail Windows prints them only to a debugger (WDEB386 or SoftICE). */
+#if defined(VXD_DEBUG) && !defined(_VMM_)
+#if VXD_WINVER >= 0x0400
+#define Debug_Printf(...) _Debug_Printf_Service(__VA_ARGS__)
+#else
+#define Debug_Printf(FMT, ...) VMMCALL_Out_Debug_String(FMT)
+#endif
+#define Trace_Out(TEXT) VMMCALL_Out_Debug_String(TEXT "\r\n")
+/* Test_Debug_Installed: whether a debugger is (ZF clear). */
+static __inline__ int VMMCALL_Test_Debug_Installed(void) {
+  unsigned char zf;
+  __asm__ __volatile__(VXD_INT20(0x000100C1) "setz %0"
+                       : "=q"(zf)::"eax", "memory", "cc");
+  return !zf;
+}
+static __inline__ void vxd_assert_failed_(const char *e, const char *file,
+                                          int line) {
+  VMMCALL_Out_Debug_String("assertion failed: ");
+  VMMCALL_Out_Debug_String(e);
+  VMMCALL_Out_Debug_String(", ");
+  VMMCALL_Out_Debug_String(file);
+  Debug_Printf(" line %d", line);
+  VMMCALL_Out_Debug_String("\r\n");
+  if (VMMCALL_Test_Debug_Installed())
+    __asm__ __volatile__("int3");
+}
+#define VXD_ASSERT(E)                                                        \
+  ((E) ? (void)0 : vxd_assert_failed_(#E, __FILE__, __LINE__))
+#elif !defined(_VMM_)
+#define Debug_Printf(...) ((void)0)
+#define Trace_Out(TEXT) ((void)0)
+#define VXD_ASSERT(E) ((void)0)
+#endif
 
 /* Set_Global_Time_Out: call CALLBACK (a VXD_CALLBACK) once after MS
    milliseconds, with REF in EDX. The handle, for Cancel_Time_Out, or 0
@@ -511,6 +668,52 @@ DWORD _PageFree(DWORD handle, DWORD flags);
 DWORD _LinPageLock(DWORD page, DWORD npages, DWORD flags);
 DWORD _LinPageUnLock(DWORD page, DWORD npages, DWORD flags);
 void *_MapPhysToLinear(DWORD phys, DWORD nbytes, DWORD flags);
+
+/* Lock N bytes of a program's memory at LIN and map them where any
+   context can reach them (_LinPageLock with PAGEMAPGLOBAL): their global
+   address, or 0 if it failed. A VxD that finishes a DeviceIoControl
+   later, from a time-out, an event or an interrupt, uses the global
+   addresses, since the program's own are valid only in its context.
+   vxd_unlock_global takes the global address back. */
+static __inline__ void *vxd_lock_global(DWORD lin, DWORD n) {
+  DWORD first = lin >> 12, g;
+  if (!n)
+    return 0;
+  g = _LinPageLock(first, ((lin + n - 1) >> 12) - first + 1, PAGEMAPGLOBAL);
+  return g ? (void *)(g + (lin & 0xFFF)) : 0;
+}
+static __inline__ void vxd_unlock_global(void *global, DWORD n) {
+  DWORD lin = (DWORD)global, first = lin >> 12;
+  if (global && n)
+    _LinPageUnLock(first, ((lin + n - 1) >> 12) - first + 1, PAGEMAPGLOBAL);
+}
+
+#if VXD_WINVER >= 0x0400 && !defined(_VMM_)
+/* A DeviceIoControl that finishes later (Windows 95 and later). When the
+   program passes an OVERLAPPED (DIOCParams.lpoOverlapped, nonzero only
+   if it opened the VxD with FILE_FLAG_OVERLAPPED), W32_DEVICEIOCONTROL
+   can return VXD_DIOC_PENDING in EAX: DeviceIoControl then returns FALSE
+   with GetLastError() ERROR_IO_PENDING, and the program waits with
+   GetOverlappedResult or on the OVERLAPPED's event. The VxD locks the
+   OVERLAPPED and the buffers it will use with vxd_lock_global, and when
+   it is done calls VWIN32_DIOCCompletion with the OVERLAPPED's global
+   address and the number of bytes for GetOverlappedResult, and unlocks
+   them. vxd/async.c does this. */
+#define VXD_DIOC_PENDING ((DWORD)-1)
+struct vxd_overlapped {           /* the OVERLAPPED */
+  DWORD Internal;                 /* VWIN32's: the event to signal */
+  DWORD InternalHigh;             /* the number of bytes transferred */
+  DWORD Offset, OffsetHigh;
+  DWORD hEvent;
+};
+static __inline__ void VWIN32_DIOCCompletion(struct vxd_overlapped *o,
+                                             DWORD nbytes) {
+  struct vxd_regs r = {0};
+  o->InternalHigh = nbytes;
+  r.ebx = o->Internal;
+  VXD_CALL(VWIN32_DIOCCompletionRoutine, &r);
+}
+#endif
 
 /* The registry (Windows 95 and later); they return ERROR_SUCCESS (0) or
    an error. */

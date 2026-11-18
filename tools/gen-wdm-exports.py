@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Make wdm9x-exports.txt from the WDM import libraries of the Windows 98
-and ME DDKs, and the port class and kernel streaming drivers they ship.
+and ME DDKs, and the port class, kernel streaming, USB and HID drivers
+they ship.
 
     gen-wdm-exports.py VERSION=FILE ... > wdm9x-exports.txt
 
@@ -11,14 +12,20 @@ and ME DDKs, and the port class and kernel streaming drivers they ship.
     gen-wdm-exports.py "4.10=$L98/wdm.lib" "4.90=$LME/wdm.lib" \\
         "4.10=$L98/portcls.lib" "4.10=$L98/ks.lib" \\
         "4.10.2222=$SE/PORTCLS.SYS" "4.10.2222=$SE/KS.SYS" \\
-        "4.90=$ME/portcls.sys" "4.90=$ME/ks.sys" > tools/wdm9x-exports.txt
+        "4.90=$ME/portcls.sys" "4.90=$ME/ks.sys" \\
+        "4.10=$L98/usbd.lib" "4.10=$L98/hidclass.lib" \\
+        "4.10=$L98/hidparse.lib" "4.10.2222=$SE/USBD.SYS" \\
+        "4.10.2222=$SE/HIDCLASS.SYS" "4.10.2222=$SE/HIDPARSE.SYS" \\
+        "4.90=$ME/usbd.sys" "4.90=$ME/hidclass.sys" \\
+        "4.90=$ME/hidparse.sys" > tools/wdm9x-exports.txt
 
 A WDM driver (a .sys that Windows 98 and ME load as well as Windows 2000
 and later) links wdm.lib, which names the functions of the kernel that
 NTKERN.VXD gives it on 98 and ME. A WDM audio driver also imports
-PORTCLS.SYS (port class) and KS.SYS (kernel streaming), whose functions
-grew in 98 Second Edition (4.10.2222) and ME: the 98 DDK has their import
-libraries, and the 98 SE and ME DDKs the drivers. This writes one line
+PORTCLS.SYS (port class) and KS.SYS (kernel streaming), a USB driver
+USBD.SYS, and a HID driver HIDCLASS.SYS and HIDPARSE.SYS, whose functions
+changed in 98 Second Edition (4.10.2222) and ME: the 98 DDK has their
+import libraries, and the 98 SE and ME DDKs the drivers. This writes one line
 per function: the module, the name and the versions whose library or
 driver has it, for check-imports.py --wdm. Only the names are taken from
 the files.

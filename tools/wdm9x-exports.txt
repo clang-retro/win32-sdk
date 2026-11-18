@@ -23,6 +23,37 @@ hal.dll WRITE_PORT_BUFFER_USHORT 4.10 4.90
 hal.dll WRITE_PORT_UCHAR 4.10 4.90
 hal.dll WRITE_PORT_ULONG 4.10 4.90
 hal.dll WRITE_PORT_USHORT 4.10 4.90
+hidclass.sys HidRegisterMinidriver 4.10 4.10.2222 4.90
+hidparse.sys HidP_FreeCollectionDescription 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetButtonCaps 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetCaps 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetCollectionDescription 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetData 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetExtendedAttributes 4.10.2222 4.90
+hidparse.sys HidP_GetLinkCollectionNodes 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetScaledUsageValue 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetSpecificButtonCaps 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetSpecificValueCaps 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetUsageValue 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetUsageValueArray 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetUsages 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetUsagesEx 4.10 4.10.2222 4.90
+hidparse.sys HidP_GetValueCaps 4.10 4.10.2222 4.90
+hidparse.sys HidP_InitializeReportForID 4.10.2222 4.90
+hidparse.sys HidP_MaxDataListLength 4.10 4.10.2222 4.90
+hidparse.sys HidP_MaxUsageListLength 4.10 4.10.2222 4.90
+hidparse.sys HidP_SetData 4.10 4.10.2222 4.90
+hidparse.sys HidP_SetScaledUsageValue 4.10 4.10.2222 4.90
+hidparse.sys HidP_SetUsageValue 4.10 4.10.2222 4.90
+hidparse.sys HidP_SetUsageValueArray 4.10 4.10.2222 4.90
+hidparse.sys HidP_SetUsages 4.10 4.10.2222 4.90
+hidparse.sys HidP_SysPowerCaps 4.10 4.10.2222 4.90
+hidparse.sys HidP_SysPowerEvent 4.10 4.10.2222 4.90
+hidparse.sys HidP_TranslateUsageAndPagesToI8042ScanCodes 4.10.2222 4.90
+hidparse.sys HidP_TranslateUsagesToI8042ScanCodes 4.10 4.10.2222 4.90
+hidparse.sys HidP_UnsetUsages 4.10 4.10.2222 4.90
+hidparse.sys HidP_UsageAndPageListDifference 4.10.2222 4.90
+hidparse.sys HidP_UsageListDifference 4.10 4.10.2222 4.90
 ks.sys ??0CBaseUnknown@@QAE@ABU_GUID@@PAUIUnknown@@@Z 4.10.2222 4.90
 ks.sys ??0CBaseUnknown@@QAE@PAUIUnknown@@@Z 4.10.2222 4.90
 ks.sys ??1CBaseUnknown@@UAE@XZ 4.10.2222 4.90
@@ -651,3 +682,41 @@ portcls.sys PcTerminateConnection 4.10 4.10.2222 4.90
 portcls.sys PcUnregisterIoTimeout 4.90
 portcls.sys PcValidateConnectRequest 4.10 4.10.2222 4.90
 portcls.sys PcVerifyFilterIsReady 4.10 4.10.2222 4.90
+usbd.sys USBD_AllocateDeviceName 4.10 4.10.2222 4.90
+usbd.sys USBD_CalculateUsbBandwidth 4.10 4.10.2222 4.90
+usbd.sys USBD_CompleteRequest 4.10 4.10.2222 4.90
+usbd.sys USBD_CreateConfigurationRequest 4.10 4.10.2222 4.90
+usbd.sys USBD_CreateConfigurationRequestEx 4.90
+usbd.sys USBD_CreateDevice 4.10 4.10.2222 4.90
+usbd.sys USBD_Debug_GetHeap 4.10 4.10.2222 4.90
+usbd.sys USBD_Debug_LogEntry 4.10 4.10.2222 4.90
+usbd.sys USBD_Debug_RetHeap 4.10 4.10.2222 4.90
+usbd.sys USBD_Dispatch 4.10 4.10.2222 4.90
+usbd.sys USBD_FreeDeviceMutex 4.10.2222 4.90
+usbd.sys USBD_FreeDeviceName 4.10 4.10.2222 4.90
+usbd.sys USBD_GetDeviceInformation 4.10 4.10.2222 4.90
+usbd.sys USBD_GetInterfaceLength 4.10 4.10.2222 4.90
+usbd.sys USBD_GetPdoRegistryParameter 4.10 4.10.2222 4.90
+usbd.sys USBD_GetSuspendPowerState 4.10.2222 4.90
+usbd.sys USBD_GetUSBDIVersion 4.10 4.10.2222 4.90
+usbd.sys USBD_InitializeDevice 4.10 4.10.2222 4.90
+usbd.sys USBD_MakePdoName 4.10 4.10.2222 4.90
+usbd.sys USBD_ParseConfigurationDescriptor 4.10 4.10.2222 4.90
+usbd.sys USBD_ParseConfigurationDescriptorEx 4.90
+usbd.sys USBD_ParseDescriptors 4.90
+usbd.sys USBD_QueryBusTime 4.10.2222 4.90
+usbd.sys USBD_RegisterHcDeviceCapabilities 4.10 4.10.2222 4.90
+usbd.sys USBD_RegisterHcFilter 4.10 4.90
+usbd.sys USBD_RegisterHostController 4.10 4.10.2222 4.90
+usbd.sys USBD_RemoveDevice 4.10 4.10.2222 4.90
+usbd.sys USBD_RestoreDevice 4.10 4.10.2222 4.90
+usbd.sys USBD_SetSuspendPowerState 4.10.2222 4.90
+usbd.sys USBD_WaitDeviceMutex 4.10.2222 4.90
+usbd.sys _USBD_CreateConfigurationRequestEx@8 4.10 4.10.2222 4.90
+usbd.sys _USBD_FreeDeviceMutex@4 4.10
+usbd.sys _USBD_GetSuspendPowerState@4 4.10
+usbd.sys _USBD_ParseConfigurationDescriptorEx@28 4.10 4.10.2222 4.90
+usbd.sys _USBD_ParseDescriptors@16 4.10 4.10.2222 4.90
+usbd.sys _USBD_RegisterHcFilter@8 4.10.2222
+usbd.sys _USBD_SetSuspendPowerState@8 4.10
+usbd.sys _USBD_WaitDeviceMutex@4 4.10

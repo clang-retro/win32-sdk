@@ -5,6 +5,7 @@ config import-ms-sdk.py made from a Microsoft VxD DDK), with JWlink.
 
     vxd-link.py [--static | --win31] [--name NAME] [--kit ms-KIT]
                 [--version 4.10.0.1998 [--description TEXT] ...]
+                [--map OUT.MAP] [--sym OUT.SYM]
                 -o OUT.VXD FILE.o ... [LIB.a ...]
 
 The VxD exports its Device Descriptor Block, NAME_DDB (VXD_DEVICE(NAME,
@@ -27,6 +28,9 @@ the strings --description, --company, --product, --copyright and
 --product-version: Windows keeps a VxD's resources after its LE image, in
 the 16-bit resource format, where the LE header's two Windows resource
 fields point.
+
+--sym writes a .SYM file of the VxD's public and static symbols, for
+WDEB386 and SoftICE (mapsym.py, from JWlink's map file).
 """
 import argparse
 import os
@@ -116,6 +120,9 @@ def main():
                     "(ms-w95-vxd, ...): link its libraries (VXDWRAPS.CLB) "
                     "before the package's")
     ap.add_argument("--map", help="write a map file")
+    ap.add_argument("--sym", help="write a .SYM file (the VxD's public "
+                    "and static symbols, for WDEB386 and SoftICE: "
+                    "mapsym.py)")
     ap.add_argument("--version", help="add a version resource with this "
                     "file version (4.10.0.1998)")
     ap.add_argument("--product-version", help="its product version "
@@ -142,8 +149,14 @@ def main():
              "name '%s'" % os.path.abspath(a.out),
              "option modname=%s" % name,
              "option quiet"]
-    if a.map:
-        lines.append("option map='%s'" % os.path.abspath(a.map))
+    mapfile = a.map
+    if a.sym and not mapfile:
+        fd, mapfile = tempfile.mkstemp(suffix=".map")
+        os.close(fd)
+    if mapfile:
+        # With the static symbols, which the .SYM file has too.
+        lines += ["option map='%s'" % os.path.abspath(mapfile),
+                  "option statics"]
     LIBS = (".a", ".lib", ".clb")
     objs = [f for f in a.inputs if not f.lower().endswith(LIBS)]
     libs = [f for f in a.inputs if f.lower().endswith(LIBS)]
@@ -182,8 +195,15 @@ def main():
         print("\n".join(lines))
     try:
         r = subprocess.run([jwlink, "@" + directives])
+        if r.returncode == 0 and a.sym:
+            r = subprocess.run([sys.executable,
+                                os.path.join(HERE, "mapsym.py"), a.out,
+                                "--map", mapfile, "--name", name,
+                                "-o", a.sym])
     finally:
         os.unlink(directives)
+        if mapfile != a.map:
+            os.unlink(mapfile)
     if r.returncode == 0 and a.version:
         with open(a.out, "rb") as f:
             head = f.read(0x400)
