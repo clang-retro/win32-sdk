@@ -981,7 +981,7 @@ typedefs, under the same names as the DDK's:
 | `ifs.h` | the installable file system manager (`ioreq`, `IFSFN_*`, the handle function tables) |
 | `ior.h`, `blockdev.h`, `drp.h`, `ilb.h`, `sgd.h`, `med.h`, `vrp.h`, `aep.h`, `isp.h`, `irs.h`, `ios.h`, `dcb.h`, `iop.h`, `ida.h`, `ddb.h`, `dvt.h`, `ivt.h` | IOS and the layered block device drivers (`.PDR` port drivers and the rest) |
 | `ndis.h`, `netvxd.h` | NDIS 3.1 network drivers (from the 95 and 98 DDKs; ME's `ndis.h` is NDIS 5's, for WDM) |
-| `minivdd.h` | display mini-VDDs |
+| `minivdd.h` | display mini-VDDs (the VxD half of a 95, 98 or ME display driver): `vxd/minivdd.c` gets VDD.VXD's dispatch table with `VDD_Get_Mini_Dispatch_Table` at `Sys_Critical_Init` and fills in `VXD_CALLBACK`s at the function numbers it handles |
 | `mmdevldr.h` | MMDEVLDR, which loads sound cards' VxDs and 16-bit drivers (its services, `MMDEVLDR_Register_Device_Driver` and `_MMDEVLDR_SetDevicePresence` and the rest, are in `<vxdsvc.h>`) |
 | `vkd.h`, `vmd.h` | the keyboard (`SS_*` shift states, the hot key flags, `Paste_Rec`) and the mouse (`VMD_Type_*`, `Mouse_Instance`, the cursor drawing VxD structures) |
 

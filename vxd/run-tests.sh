@@ -6,7 +6,8 @@
 # driver) in C99, C17 and C23, iospdr.c's (an IOS port driver) and
 # async.c's (a DeviceIoControl that finishes later), hook.c's (service
 # hooks, and its .SYM file, with line numbers with -g) and bios.c's
-# (nested execution; also with -DVXD_DEBUG) at each level, the subsystem
+# (nested execution; also with -DVXD_DEBUG) and minivdd.c's (a display
+# mini-VDD, static) at each level, the subsystem
 # headers (compiled, and their layouts checked), and
 # msddk.c's (msddk31.c's for the 3.1 one) with each ms-*-vxd.cfg (import-ms-sdk.py's VxD kits) in CFGDIR,
 # and check each one with vxd-check.py. No emulator runs VxDs: with WIN9X_RUN,
@@ -148,6 +149,13 @@ done
 # events through <aep.h>, <drp.h>, <ilb.h> and <isp.h>.
 for opt in O0 O2 Os; do
   vxd iospdr-$opt "$here/iospdr.c" win95-vxd.cfg --dynamic "--name IOSPDR" \
+    -- -$opt -Wall -Wextra -Werror
+done
+# A display mini-VDD (static), which fills in VDD.VXD's dispatch table
+# with VXD_CALLBACKs; vxd-check.py follows the DDB to locked code.
+for opt in O0 O2 Os; do
+  vxd minivdd-$opt "$here/minivdd.c" win95-vxd.cfg --static \
+    "--static --name MINIVDD --sym minivdd-$opt.sym" \
     -- -$opt -Wall -Wextra -Werror
 done
 # The subsystem headers (include/, from gen-vxd-headers.py): each on its
