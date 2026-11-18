@@ -3,7 +3,7 @@
 
     check-imports.py [--dlls DIR] [--allow-unicode] [--nt VERSION]
                      FILE.exe|FILE.dll ...
-    check-imports.py --wdm 98|me FILE.sys ...
+    check-imports.py --wdm 98|98se|me FILE.sys ...
     check-imports.py --miniport FILE.mpd ...
 
 Programs for Windows 9x should be native ANSI builds. Windows 95, 98 and ME
@@ -44,11 +44,13 @@ for Windows 95, 98 and ME, where SCSIPORT.PDR loads it: a native-subsystem
 image of version 4.x or older that imports only the SCSIPORT.SYS
 functions in scsiport9x-exports.txt (from the 95 and 98 DDKs).
 
-With --wdm 98 or me, a WDM driver (a .sys built for Windows 2000 and later
-too) is checked for Windows 98 or ME, where NTKERN.VXD loads it: it must
-be a native-subsystem image of version 4.x or older and import only the
-ntoskrnl.exe functions that version's wdm.lib names (wdm9x-exports.txt,
-from the 98 and ME DDKs).
+With --wdm 98, 98se or me, a WDM driver (a .sys built for Windows 2000 and
+later too) is checked for Windows 98, 98 Second Edition or ME, where
+NTKERN.VXD loads it: it must be a native-subsystem image of version 4.x or
+older and import only the ntoskrnl.exe functions that version's wdm.lib
+names, and the PORTCLS.SYS and KS.SYS functions (a WDM audio driver's) its
+port class and kernel streaming drivers export (wdm9x-exports.txt, from
+the 98 and ME DDKs and the drivers of 98 SE and ME).
 
 The exit status is 1 when something is missing, 0 otherwise.
 """
@@ -386,7 +388,7 @@ def main():
                     help="check for this Windows NT version (3.10 to 5.2) "
                     "instead of Windows 9x")
     ap.add_argument("--wdm", choices=sorted(WDM_VERSIONS),
-                    help="check a WDM driver for Windows 98 or ME")
+                    help="check a WDM driver for Windows 98, 98 SE or ME")
     ap.add_argument("--miniport", action="store_true",
                     help="check a SCSI miniport (.mpd) for Windows 9x")
     ap.add_argument("files", nargs="+")
@@ -463,7 +465,11 @@ def main():
     return 1 if bad else 0
 
 
-WDM_VERSIONS = {"98": "4.10", "me": "4.90"}
+# What each --wdm version has: 98 SE (4.10.2222) has 98's kernel functions
+# and more of PORTCLS.SYS's and KS.SYS's.
+WDM_VERSIONS = {"98": {"4.10"}, "98se": {"4.10", "4.10.2222"},
+                "me": {"4.90"}}
+WDM_NAMES = {"4.10": "98", "4.10.2222": "98 SE", "4.90": "ME"}
 
 
 def check_miniport(pe):
@@ -505,7 +511,7 @@ def check_wdm(pe, which):
             module, name, *versions = line.split()
             have[(module, name)] = versions
     want = WDM_VERSIONS[which]
-    label = "Windows 98" if which == "98" else "Windows ME"
+    label = "Windows " + WDM_NAMES[max(want)]
     bad = False
     if pe.subsystem != NATIVE:
         print("  error: not a driver (native subsystem)")
@@ -520,10 +526,9 @@ def check_wdm(pe, which):
             print("  error: %s!%s is not one of the WDM functions of %s"
                   % (dll, name, label))
             bad = True
-        elif want not in versions:
+        elif not want & set(versions):
             print("  error: %s!%s is in the WDM of %s, not %s"
-                  % (dll, name, " and ".join(
-                      "98" if v == "4.10" else "ME" for v in versions),
+                  % (dll, name, " and ".join(WDM_NAMES[v] for v in versions),
                      label))
             bad = True
     return bad

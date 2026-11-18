@@ -5,8 +5,9 @@
 # sends it an IOCTL. Each driver is test-signed (drvsign.py) before it
 # is loaded, and a package of one with clanghello.inf gets a catalog. The
 # NT 4.0 build is checked as a WDM driver for Windows 98 and ME too
-# (check-imports.py --wdm), and miniport.c is built as a SCSI miniport for
-# Windows 9x (check-imports.py --miniport).
+# (check-imports.py --wdm), as is wdmaudio.c, a WDM audio driver (port
+# class) for 98, 98 SE and ME, and miniport.c is built as a SCSI miniport
+# for Windows 9x (check-imports.py --miniport).
 #
 #   CFGDIR   folder with clang and the config files (a toolchain package's
 #            bin/), with the win32-sdk sysroots next to it in ../sysroots
@@ -128,10 +129,10 @@ if [ -n "$last" ]; then
      } >pkg.log 2>&1
   then pass=$((pass + 1)); else bad "catalog" pkg.log; fi
 fi
-# WDM drivers for Windows 98 and ME: hello.c, built for NT 4.0's subsystem
-# version, uses only what their WDM has; notwdm.c does not.
+# WDM drivers for Windows 98, 98 SE and ME: hello.c, built for NT 4.0's
+# subsystem version, uses only what their WDM has; notwdm.c does not.
 if [ -f "$CFGDIR/nt4-ddk.cfg" ] && [ -f nt4-ddk-O2.sys ]; then
-  for v in 98 me; do
+  for v in 98 98se me; do
     if ${PYTHON:-python3} "$check" --wdm $v nt4-ddk-O2.sys >wdm-$v.chk 2>&1
     then pass=$((pass + 1)); else bad "wdm $v" wdm-$v.chk; fi
   done
@@ -142,6 +143,35 @@ if [ -f "$CFGDIR/nt4-ddk.cfg" ] && [ -f nt4-ddk-O2.sys ]; then
        ! grep -q "PsGetVersion is not one of the WDM functions" notwdm.chk
   then
     bad "notwdm check-imports" notwdm.chk
+  else
+    pass=$((pass + 1))
+  fi
+fi
+# A WDM audio driver (wdmaudio.c, port class) for 98, 98 SE and ME, and
+# with -DME_ONLY one that imports what only ME's PORTCLS.SYS has.
+if [ -f "$CFGDIR/nt4-ddk.cfg" ]; then
+  for opt in O0 O2; do
+    t=wdmaudio-$opt
+    if ! "$CFGDIR/clang" --config="$CFGDIR/nt4-ddk.cfg" -$opt -Wall -Werror \
+         "$here/wdmaudio.c" -lportcls -o $t.sys >$t.log 2>&1; then
+      bad "$t build" $t.log; continue
+    fi
+    for v in 98 98se me; do
+      if ${PYTHON:-python3} "$check" --wdm $v $t.sys >$t-$v.chk 2>&1
+      then pass=$((pass + 1)); else bad "$t wdm $v" $t-$v.chk; fi
+    done
+  done
+  if ! "$CFGDIR/clang" --config="$CFGDIR/nt4-ddk.cfg" -O2 -DME_ONLY \
+       "$here/wdmaudio.c" -lportcls -o wdmaudio-me.sys >wdmaudio-me.log 2>&1
+  then
+    bad "wdmaudio-me build" wdmaudio-me.log
+  elif ${PYTHON:-python3} "$check" --wdm 98se wdmaudio-me.sys \
+         >wdmaudio-me.chk 2>&1 ||
+       ! grep -q "PcRegisterIoTimeout is in the WDM of ME" wdmaudio-me.chk ||
+       ! ${PYTHON:-python3} "$check" --wdm me wdmaudio-me.sys \
+         >>wdmaudio-me.chk 2>&1
+  then
+    bad "wdmaudio-me check-imports" wdmaudio-me.chk
   else
     pass=$((pass + 1))
   fi

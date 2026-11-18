@@ -581,12 +581,34 @@ PE ones. WDM drivers for 98 and ME are PE `.sys` files that NTKERN.VXD
 loads. It gives them only part of the kernel API, the functions of the
 98 and ME DDKs' `wdm.lib`, and runs only drivers with a native subsystem
 version of 4.x or older. `nt4-ddk.cfg` builds such drivers, and
-`check-imports.py --wdm 98` (or `--wdm me`) checks both things. The
+`check-imports.py --wdm 98` (or `--wdm 98se`, `--wdm me`) checks both things. The
 function list is `tools/wdm9x-exports.txt`, which
 `tools/gen-wdm-exports.py` makes from those two libraries. 98 has 336
 functions and ME 346. ME has 12 that 98 lacks, such as `ExCreateCallback`
 and `RtlZeroMemory`, and lacks two of 98's. The `ms-w98-wdm` kit (below)
 builds with the 98 DDK's own `wdm.h`.
+
+WDM audio drivers (port class miniports) build the same way, with
+mingw-w64's `<portcls.h>` and `-lportcls`, the import library
+`build-vxd.sh` makes of the PORTCLS.SYS functions
+(`tools/portcls9x-exports.txt`) that mingw-w64 lacks:
+
+```sh
+clang --config=nt4-ddk.cfg -O2 mydriver.c -lportcls -o mydriver.sys
+python3 share/clang-dos/check-imports.py --wdm 98se mydriver.sys
+```
+
+Port class and kernel streaming (KS.SYS) grew in each version: 98's
+PORTCLS.SYS has 39 functions, 98 Second Edition's 47 (the event
+functions, `PcAddToEventTable` and the rest) and ME's 55 (the DRM ones,
+`PcAddContentHandlers` and the rest, and `PcRegisterIoTimeout`), and
+`wdm9x-exports.txt` has each version's, from the 98 DDK's `portcls.lib`
+and `ks.lib` and the drivers of 98 SE and ME. `--wdm 98se` checks for
+98 SE, which has 98's kernel functions. `tests/ddk/wdmaudio.c` is an
+adapter driver that makes a topology port when its device starts, in C.
+`scripts/fix-ddk-headers.sh` makes `ksmedia.h` (which `<portcls.h>`
+includes) compile in kernel mode, where nothing defines the `TCHAR` of
+its `TRANSPORTBASICPARMS`.
 
 `tests/ddk/hello.c` is a small driver that makes `\Device\ClangHello` and
 answers an IOCTL with a 64-bit computation and whether its `__except`

@@ -1,0 +1,51 @@
+# The PORTCLS.SYS functions a WDM audio driver can import on Windows 98,
+# 98 SE and ME, decorated: those the 98 DDK's portcls.lib has and those
+# 98 SE's and ME's export that <portcls.h> declares. build-vxd.sh makes
+# libportcls.a from it; check-imports.py --wdm checks which version has
+# each (wdm9x-exports.txt).
+PcAcquireFormatResources@16
+PcAddAdapterDevice@20
+PcAddContentHandlers@12
+PcAddToPropertyTable@20
+PcCaptureFormat@16
+PcCompletePendingPropertyRequest@8
+PcCreateContentMixed@12
+PcCreateSubdeviceDescriptor@40
+PcDeleteSubdeviceDescriptor@4
+PcDestroyContent@4
+PcDispatchIrp@8
+PcDmaMasterDescription@40
+PcDmaSlaveDescription@32
+PcForwardContentToDeviceObject@12
+PcForwardContentToFileObject@8
+PcForwardContentToInterface@12
+PcForwardIrpSynchronous@8
+PcFreePropertyTable@4
+PcGetContentRights@8
+PcGetDeviceProperty@20
+PcGetTimeInterval@8
+PcHandlePropertyWithTable@16
+PcInitializeAdapterDriver@12
+PcNewDmaChannel@20
+PcNewInterruptSync@20
+PcNewIrpStreamPhysical@28
+PcNewIrpStreamVirtual@24
+PcNewMiniport@8
+PcNewPort@8
+PcNewRegistryKey@36
+PcNewResourceList@20
+PcNewResourceSublist@20
+PcNewServiceGroup@8
+PcPinPropertyHandler@12
+PcRegisterAdapterPowerManagement@8
+PcRegisterIoTimeout@12
+PcRegisterIrpHandler@12
+PcRegisterPhysicalConnection@20
+PcRegisterPhysicalConnectionFromExternal@20
+PcRegisterPhysicalConnectionToExternal@20
+PcRegisterSubdevice@12
+PcRequestNewPowerState@8
+PcTerminateConnection@12
+PcUnregisterIoTimeout@12
+PcValidateConnectRequest@16
+PcVerifyFilterIsReady@8
