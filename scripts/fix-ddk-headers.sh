@@ -30,7 +30,8 @@
 # package, ddk-include next to this script): hidport.h (HID minidrivers)
 # and 1394.h (IEEE 1394 client drivers), and the DirectDraw and Direct3D
 # HAL of display drivers that mingw-w64's winddi.h includes, ddrawint.h,
-# d3dnthal.h and dvp.h, all of which gen-vxd-headers.py --wdm made from
+# d3dnthal.h and dvp.h, and dxmini.h (DirectDraw in video miniports),
+# all of which gen-vxd-headers.py --wdm made from
 # the 2000 and XP DDKs; and hdaudio.h (HD Audio function drivers on XP's
 # and later's HDAUDBUS.SYS), written from Microsoft's documentation.
 #

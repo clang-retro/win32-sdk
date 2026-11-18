@@ -198,7 +198,36 @@ WDM_SPECS = {
    an NT display driver (<winddi.h> includes it): D3DNTHAL_GLOBALDRIVERDATA,
    the D3DNTHAL_CALLBACKS tables and the D3DNTHAL_*DATA each callback
    gets, and the DirectX 6 and later command buffer (D3DNTHAL_DP2*)."""),
+    "dxmini": (["dxmini.h"], ["ntddk.h", "windef.h"], """Kernel-mode DirectDraw in
+   a video miniport (VIDEO_HW_INITIALIZATION_DATA's DirectX entry
+   points, IOCTL_VIDEO_QUERY_INTERFACE with GUID_DxApi): the DXAPI
+   callbacks for overlay flips, video port fields, capture, interrupts
+   and skip patterns, and the DDxxx structures each one gets. It needs
+   DWORD and BOOL, so it includes <ntdef.h> and <windef.h>, which work
+   after <miniport.h> or <ntddk.h>."""),
 }
+
+# What a generated header includes, where that differs from what the
+# DDK's needs first: a video miniport includes <miniport.h>, not
+# <ntddk.h>, and both work after <ntdef.h>.
+WDM_EMIT = {"dxmini": ["ntdef.h", "windef.h"]}
+# And what it declares itself, where the DDK's header does so only when
+# the kernel's headers are not there (which the generator always reads):
+# a video miniport has no <wdm.h>, so <dxmini.h> declares the MDL, with
+# wdm.h's layout, unless wdm.h did (MDL_MAPPING_FLAGS).
+WDM_TEXT = {"dxmini": """#ifndef MDL_MAPPING_FLAGS
+typedef struct _MDL {
+  struct _MDL *MdlNext;
+  short MdlSize;
+  short MdlFlags;
+  struct _EPROCESS *Process;
+  ULONG *lpMappedSystemVa;
+  ULONG *lpStartVa;
+  ULONG ByteCount;
+  ULONG ByteOffset;
+} MDL, *PMDL;
+#endif
+"""}
 
 KEYWORDS = set("""auto break case char const continue default do double else
 enum extern float for goto if inline int long register restrict return short
@@ -240,13 +269,14 @@ class Kit:
                 "-idirafter", self.block, "-ferror-limit=0", "-w"] + EXTRA + \
             list(args)
 
-    def source(self, includes, extra=""):
+    def source(self, includes, extra="", first=""):
         p = os.path.join(self.tmp, "t.c")
         with open(p, "w") as f:
             if PACKED:
                 f.write("#define WANTVXDWRAPS\n")
             else:
                 f.write("\n")
+            f.write(first)
             for h in includes:
                 f.write("#include <%s>\n" % h)
             f.write(extra)
@@ -584,6 +614,38 @@ def ast_of(kit, includes):
     return ast, errors, r.stderr
 
 
+def guids_of(kit, includes, files):
+    """The GUIDs the headers define with DEFINE_GUID: [(name, values)],
+    read from their definitions with INITGUID."""
+    src = kit.source(includes, first="#define INITGUID\n")
+    r = run(kit.cmd("-fsyntax-only", "-Xclang", "-ast-dump=json", src))
+    if not r.stdout:
+        return []
+    ast = json.loads(r.stdout)
+    Walker().node(ast)
+    out = []
+
+    def ints(n, acc):
+        if n.get("kind") == "IntegerLiteral":
+            acc.append(int(n["value"]))
+        for c in n.get("inner", []):
+            ints(c, acc)
+        return acc
+    for n in ast.get("inner", []):
+        if n.get("kind") != "VarDecl" or \
+                os.path.basename(n.get("_file") or "").lower() not in files:
+            continue
+        if "GUID" not in n.get("type", {}).get("qualType", ""):
+            continue
+        v = ints(n, [])
+        if len(v) == 11:
+            out.append((n["name"], v))
+    return out
+
+
+GUIDS = {}  # header -> [(gate, name, values)]
+
+
 # ---- the constants ----
 
 DEFINE = re.compile(r"#define ([A-Za-z_]\w*)(\(?)\s*(.*)$")
@@ -771,6 +833,11 @@ def main():
                       file=sys.stderr)
                 continue
             d = Decls(ast, files)
+            if SPECS is WDM_SPECS:
+                for g, v in guids_of(kit, incl, files):
+                    have = GUIDS.setdefault(name, [])
+                    if g not in [x[1] for x in have]:
+                        have.append((gate, g, v))
             macros = macros_of(kit, incl, files)
             vals = evaluate(kit, incl, macros)
             lay = layout_values(kit, incl, d.records) \
@@ -943,9 +1010,21 @@ def write(name, intro, per, files, owner, base, base_order):
     first = []
     if not PACKED:
         # In the order the DDK's header needs them.
-        first = [i.replace(".h", "") for i in SPECS[name][1]]
+        pre = WDM_EMIT.get(name, SPECS[name][1]) if wdm \
+            else SPECS[name][1]
+        first = [i.replace(".h", "") for i in pre]
     for i in first + sorted(incs - set(first)):
         h.append("#include <%s.h>\n" % i)
+    if GUIDS.get(name):
+        h.append("#include <guiddef.h>\n")
+        for gate, g, v in GUIDS[name]:
+            line = "DEFINE_GUID(%s, 0x%08x, 0x%04x, 0x%04x, %s);\n" % (
+                g, v[0], v[1], v[2], ", ".join("0x%02x" % b for b in v[3:]))
+            if gate != gates[0]:
+                line = "#if %s >= %s\n%s#endif\n" % (GATE, gate, line)
+            h.append(line)
+    if wdm and name in WDM_TEXT:
+        h.append(WDM_TEXT[name])
     if PACKED:
         h.append("\n#pragma pack(push, 1)\n")
     body = []

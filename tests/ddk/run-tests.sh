@@ -13,7 +13,8 @@
 # display.c is built as an NT display driver with a DirectDraw and
 # Direct3D HAL (win32k.sys, check-imports.py --nt); hello.c is built with
 # a PDB for WinDbg (llvm-symbolizer reads it); hdafunc.c is an HD Audio
-# function driver for XP and later; and miniport.c is
+# function driver for XP and later; vidmini.c is a video miniport with
+# kernel-mode DirectDraw; and miniport.c is
 # built as a SCSI miniport for Windows 9x (check-imports.py --miniport).
 #
 #   CFGDIR   folder with clang and the config files (a toolchain package's
@@ -261,7 +262,7 @@ fi
 # A display driver (display.c, win32k.sys's DDI) for NT 4.0 and later,
 # with a DirectDraw and Direct3D HAL, also with -DNT5_ONLY (EngAlphaBlend),
 # which NT 4.0 cannot load; and the layouts of the generated headers
-# (hidport.h, 1394.h, dvp.h, ddrawint.h, d3dnthal.h) against the 2000 and
+# (hidport.h, 1394.h, dvp.h, ddrawint.h, d3dnthal.h, dxmini.h) against the 2000 and
 # XP DDKs.
 if [ -f "$CFGDIR/nt4-ddk.cfg" ]; then
   for t in display::"4.0 5.0": "display-nt5:-DNT5_ONLY:5.0:4.0"; do
@@ -293,6 +294,19 @@ if [ -f "$CFGDIR/nt4-ddk.cfg" ]; then
       then pass=$((pass + 1)); else bad "$t ${std#* }" $t.log; fi
     done
   done
+fi
+# A video miniport with kernel-mode DirectDraw (vidmini.c, <dxmini.h>,
+# -lvideoprt), checked against NT 4.0's VIDEOPRT.SYS.
+if [ -f "$CFGDIR/nt4-ddk.cfg" ]; then
+  t=vidmini
+  if ! "$CFGDIR/clang" --config="$CFGDIR/nt4-ddk.cfg" -O2 -Wall -Wextra \
+       -Werror "$here/vidmini.c" -lvideoprt -o $t.sys >$t.log 2>&1; then
+    bad "$t build" $t.log
+  elif ! ${PYTHON:-python3} "$check" --nt 4.0 $t.sys >$t.chk 2>&1; then
+    bad "$t check-imports" $t.chk
+  else
+    pass=$((pass + 1))
+  fi
 fi
 # An HD Audio function driver (hdafunc.c, <hdaudio.h>) on the HD Audio
 # bus driver of XP (with the UAA update) and later: for XP, checked

@@ -583,7 +583,7 @@ cdecl), makes `<ndis.h>` compile next to `<ntddndis.h>`
 and adds a comma its `NdisMWanIndicateReceiveComplete` lacks. It also
 copies in the DDK headers mingw-w64 lacks, from `kernel/include`
 (`share/clang-dos/ddk-include` in the package): `<hidport.h>`, `<1394.h>`,
-`<ddrawint.h>`, `<d3dnthal.h>` and `<dvp.h>`. `build-win9x.sh` and
+`<ddrawint.h>`, `<d3dnthal.h>`, `<dvp.h>`, `<dxmini.h>` and `<hdaudio.h>`. `build-win9x.sh` and
 `build-modern-sysroot.sh` run it on each sysroot.
 
 Drivers for Windows 95, 98 and ME are mostly VxDs (LE files, below), not
@@ -722,6 +722,14 @@ clang --config=nt4-ddk.cfg -O2 -shared -Wl,--entry,_DrvEnableDriver@12 \
   mydisp.c -lwin32k -o mydisp.dll
 python3 share/clang-dos/check-imports.py --nt 4.0 mydisp.dll
 ```
+
+Video miniports (`<miniport.h>`, `<video.h>`, `-lvideoprt`) that do
+DirectDraw in kernel mode (overlay flips, video port fields, capture,
+for DXAPI.SYS) include `<dxmini.h>`, which mingw-w64 lacks;
+`gen-vxd-headers.py --wdm` made it from the 2000 and XP DDKs, with
+`GUID_DxApi`, and the miniport hands out its `DXAPI_INTERFACE` from
+`HwQueryInterface`. `tests/ddk/vidmini.c` is such a miniport. The
+generated headers have the DDKs' GUIDs (`DEFINE_GUID`) too.
 
 `tests/ddk/display.c` implements `DrvBitBlt` with `EngBitBlt` and has a
 DirectDraw and Direct3D HAL with one callback, `WaitForVerticalBlank`.
