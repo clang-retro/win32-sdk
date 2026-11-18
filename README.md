@@ -821,6 +821,12 @@ python3 tools/gen-vxd-headers.py --kits ~/kits PACKAGE/bin
 with the `ms-w95-vxd`, `ms-w98-vxd` and `ms-me-vxd` kits imported into
 PACKAGE and `~/kits` the folder `import-ms-sdk.py` read them from.
 
+The DDKs have VKD's and VMOUSE's only as MASM include files (`vkd.inc`,
+`vkdpaste.inc`, `vmd.inc`), so `tools/gen-vxd-inc.py PACKAGE/bin` makes
+`vkd.h` and `vmd.h`: it evaluates their `EQU`s, writing each as the number
+it comes to, and lays out their `STRUC`s and `UNION`s byte-packed as MASM
+does, for `vxd/layout/vkd.c` and `vmd.c` to check.
+
 An IOS port driver (`.PDR`, which IOS loads from `SYSTEM\IOSUBSYS` at
 boot) is a dynamic VxD whose `Sys_Dynamic_Device_Init` calls
 `IOS_Register` with its `DRP` (`<drp.h>`): the DRP names its load group
@@ -834,11 +840,6 @@ and records the events it got in the registry:
 clang --config=win95-vxd.cfg -O2 -c iospdr.c -o iospdr.o
 python3 share/clang-dos/vxd-link.py --name IOSPDR -o IOSPDR.PDR iospdr.o
 ```
-The DDKs have VKD's and VMOUSE's only as MASM include files (`vkd.inc`,
-`vkdpaste.inc`, `vmd.inc`), so `tools/gen-vxd-inc.py PACKAGE/bin` makes
-`vkd.h` and `vmd.h`: it evaluates their `EQU`s, writing each as the number
-it comes to, and lays out their `STRUC`s and `UNION`s byte-packed as MASM
-does, for `vxd/layout/vkd.c` and `vmd.c` to check.
 
 `vxd-link.py --version 1.2.3.4` adds a VERSIONINFO resource the way
 Microsoft's VxDs carry one, with `--product-version`, `--description`,
