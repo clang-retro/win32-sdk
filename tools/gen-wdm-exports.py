@@ -17,7 +17,11 @@ they ship.
         "4.10=$L98/hidparse.lib" "4.10.2222=$SE/USBD.SYS" \\
         "4.10.2222=$SE/HIDCLASS.SYS" "4.10.2222=$SE/HIDPARSE.SYS" \\
         "4.90=$ME/usbd.sys" "4.90=$ME/hidclass.sys" \\
-        "4.90=$ME/hidparse.sys" > tools/wdm9x-exports.txt
+        "4.90=$ME/hidparse.sys" "4.10=$L98/stream.lib" \\
+        "4.10.2222=$SE/STREAM.SYS" "4.90=$ME/stream.sys" \\
+        "4.10=$L98/usbcamd.lib" "4.10=$L98/battc.lib" \\
+        "4.10.2222=$SE/BATTC.SYS" "4.90=$ME/battc.sys" \\
+        "4.10.2222=$SE/NDIS.VXD" > tools/wdm9x-exports.txt
 
 A WDM driver (a .sys that Windows 98 and ME load as well as Windows 2000
 and later) links wdm.lib, which names the functions of the kernel that
@@ -25,7 +29,13 @@ NTKERN.VXD gives it on 98 and ME. A WDM audio driver also imports
 PORTCLS.SYS (port class) and KS.SYS (kernel streaming), a USB driver
 USBD.SYS, and a HID driver HIDCLASS.SYS and HIDPARSE.SYS, whose functions
 changed in 98 Second Edition (4.10.2222) and ME: the 98 DDK has their
-import libraries, and the 98 SE and ME DDKs the drivers. This writes one line
+import libraries, and the 98 SE and ME DDKs the drivers. So do STREAM.SYS
+(stream class minidrivers), USBCAMD.SYS (USB cameras; only 98's library)
+and BATTC.SYS (batteries). NDIS miniports (.sys) import NDIS.SYS, which on
+98 and ME is NDIS.VXD: it loads them and resolves their imports from the
+names in its _NdisNames table, which this reads from 98 SE's debug
+NDIS.VXD, found with the NDIS.SYM next to it (no other version's is in
+the DDKs). This writes one line
 per function: the module, the name and the versions whose library or
 driver has it, for check-imports.py --wdm. Only the names are taken from
 the files.
@@ -33,6 +43,7 @@ the files.
 import argparse
 import importlib.util
 import os
+import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -74,6 +85,102 @@ def exports(sys_file):
                                                    "DllUnload")}
 
 
+def le_fixups(d):
+    """{(object, offset): (object, offset)} of an LE file's internal 32-bit
+    offset fixups: where each pointer in its objects points."""
+    le = struct.unpack_from("<I", d, 0x3C)[0]
+    psize, = struct.unpack_from("<I", d, le + 0x28)
+    npages, = struct.unpack_from("<I", d, le + 0x14)
+    fpt = le + struct.unpack_from("<I", d, le + 0x68)[0]
+    frt = le + struct.unpack_from("<I", d, le + 0x6C)[0]
+    objtab = le + struct.unpack_from("<I", d, le + 0x40)[0]
+    nobj, = struct.unpack_from("<I", d, le + 0x44)
+    objs = [struct.unpack_from("<IIIIII", d, objtab + 24 * i)
+            for i in range(nobj)]
+    out = {}
+    for p in range(1, npages + 1):
+        a, b = struct.unpack_from("<II", d, fpt + 4 * (p - 1))
+        obj = pbase = None
+        for n, (_, _, _, first, count, _) in enumerate(objs, 1):
+            if first <= p < first + count:
+                obj, pbase = n, (p - first) * psize
+        i, end = frt + a, frt + b
+        while i < end:
+            src, flags = d[i], d[i + 1]
+            i += 2
+            if src & 0x20:
+                count = d[i]
+                i += 1
+            else:
+                srcs = [struct.unpack_from("<h", d, i)[0]]
+                i += 2
+            if flags & 3:
+                raise ValueError("an imported or entry fixup")
+            if flags & 0x40:
+                target = struct.unpack_from("<H", d, i)[0]
+                i += 2
+            else:
+                target = d[i]
+                i += 1
+            toff = 0
+            if src & 0xF != 2:  # not a selector
+                if flags & 0x10:
+                    toff = struct.unpack_from("<I", d, i)[0]
+                    i += 4
+                else:
+                    toff = struct.unpack_from("<H", d, i)[0]
+                    i += 2
+            if src & 0x20:
+                srcs = list(struct.unpack_from("<%dh" % count, d, i))
+                i += 2 * count
+            for so in srcs:
+                if obj is not None:
+                    out[(obj, pbase + so)] = (target, toff)
+    dpages, = struct.unpack_from("<I", d, le + 0x80)
+
+    def where(obj, off):
+        return dpages + (objs[obj - 1][3] - 1) * psize + off
+    return out, where
+
+
+def ndis_vxd_exports(vxd):
+    """(ndis.sys, name) for each function 98's NDIS.VXD gives the NDIS
+    miniports (.sys) it loads: the names in its _NdisNames table, found
+    with the NDIS.SYM next to it."""
+    spec = importlib.util.spec_from_file_location(
+        "mapsym", os.path.join(HERE, "mapsym.py"))
+    ms = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ms)
+    base = os.path.splitext(vxd)[0]
+    symfile = next((base + e for e in (".SYM", ".sym")
+                    if os.path.exists(base + e)), None)
+    if not symfile:
+        raise SystemExit("no .SYM next to %s" % vxd)
+    with open(symfile, "rb") as f:
+        _, segs = ms.read_sym(f.read())
+    start = stop = None
+    for number, _, syms, _ in segs:
+        offs = sorted(syms)
+        for k, (off, name) in enumerate(offs):
+            if name == "_NdisNames":
+                start = number, off
+                stop = offs[k + 1][0]
+    if start is None:
+        raise SystemExit("no _NdisNames in %s" % symfile)
+    with open(vxd, "rb") as f:
+        d = f.read()
+    fixups, where = le_fixups(d)
+    out = set()
+    obj, off = start
+    while off < stop:
+        t = fixups.get((obj, off))
+        if t:
+            o = where(*t)
+            out.add(("ndis.sys", d[o:d.index(b"\0", o)].decode("latin-1")))
+        off += 4
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("libs", nargs="+", metavar="VERSION=FILE")
@@ -81,7 +188,9 @@ def main():
     have = {}
     for arg in a.libs:
         version, _, lib = arg.partition("=")
-        for key in (exports(lib) if lib.lower().endswith(".sys")
+        low = lib.lower()
+        for key in (exports(lib) if low.endswith(".sys")
+                    else ndis_vxd_exports(lib) if low.endswith(".vxd")
                     else imports(lib)):
             have.setdefault(key, []).append(version)
     if not have:

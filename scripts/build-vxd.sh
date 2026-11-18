@@ -11,6 +11,7 @@
 #   $SYSROOT/lib/libportcls.a  PORTCLS.SYS's, for WDM audio drivers
 #   $SYSROOT/lib/libusbd9x.a   USBD.SYS's as Windows 98 has it, for WDM
 #                              USB drivers
+#   $SYSROOT/lib/libstream.a   STREAM.SYS's, for stream class minidrivers
 #   $SYSROOT/include/vxdsvc.h  the services' numbers (tools/vxd-services.txt)
 #   $SYSROOT/lib/libvxd.a      memcpy, memset and the like for VxDs, the
 #                              Microsoft target's 64-bit division helpers,
@@ -49,6 +50,12 @@ cp "$here"/miniport/include/*.h "$SYSROOT/include/miniport9x/"
   grep -v '^#' "$here/tools/usbd9x-exports.txt"; } >"$WORK/usbd9x.def"
 "$BIN/llvm-dlltool" -m i386 -k -d "$WORK/usbd9x.def" \
   -l "$SYSROOT/lib/libusbd9x.a"
+# Stream class minidrivers (nt4-ddk.cfg, -lstream): STREAM.SYS's import
+# library, which mingw-w64 lacks.
+{ echo "LIBRARY STREAM.SYS"; echo "EXPORTS"
+  grep -v '^#' "$here/tools/stream9x-exports.txt"; } >"$WORK/stream.def"
+"$BIN/llvm-dlltool" -m i386 -k -d "$WORK/stream.def" \
+  -l "$SYSROOT/lib/libstream.a"
 rm -rf "$WORK/stubs"
 python3 "$here/tools/gen-vxd-wraps.py" --header "$SYSROOT/include/vxdsvc.h" \
   --stubs "$WORK/stubs"

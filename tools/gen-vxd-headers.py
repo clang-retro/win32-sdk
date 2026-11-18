@@ -167,6 +167,23 @@ MINIPORT_SPECS = {
    data."""),
 }
 
+# --wdm: headers mingw-w64 lacks for WDM and NT drivers, from the 2000 and
+# XP DDKs (which 98's and ME's WDM share); the NT types they use come from
+# mingw-w64's <ntddk.h>.
+WDM_SPECS = {
+    "hidport": (["hidport.h"], ["ntddk.h", "hidusage.h", "hidclass.h"],
+                """What a HID
+   minidriver (HIDUSB.SYS's kind, under HIDCLASS.SYS) needs:
+   HID_MINIDRIVER_REGISTRATION for HidRegisterMinidriver (-lhidclass),
+   HID_DEVICE_EXTENSION, the HID descriptor, and the internal IOCTL_HID_*
+   requests HIDCLASS sends the minidriver."""),
+    "1394": (["1394.h"], ["ntddk.h"], """The IEEE 1394 (FireWire) bus:
+   the I/O request block (IRB) a 1394 client driver sends the bus driver
+   in IOCTL_1394_CLASS requests, the REQUEST_* functions, address ranges,
+   isochronous resources, and the bus and node structures. Windows 98,
+   98 SE and ME (1394BUS.SYS) and 2000 and later take the same IRBs."""),
+}
+
 KEYWORDS = set("""auto break case char const continue default do double else
 enum extern float for goto if inline int long register restrict return short
 signed sizeof static struct switch typedef union unsigned void volatile while
@@ -674,11 +691,24 @@ def main():
     args = sys.argv[1:]
     roots = None
     miniport = False
-    while args[:1] in (["--kits"], ["--miniport"]):
+    wdm = False
+    while args[:1] in (["--kits"], ["--miniport"], ["--wdm"]):
         if args[0] == "--kits":
             roots, args = args[1], args[2:]
+        elif args[0] == "--wdm":
+            wdm, args = True, args[1:]
         else:
             miniport, args = True, args[1:]
+    if wdm:
+        SPECS = WDM_SPECS
+        BASE = []
+        INCLUDE = os.path.join(HERE, "..", "kernel", "include")
+        LAYOUT = os.path.join(HERE, "..", "tests", "ddk", "wdm-layout")
+        GATE = "_WIN32_WINNT"
+        KITS = [("0x0500", "ms-w2k-ddk"), ("0x0501", "ms-xp-ddk")]
+        PRELUDE = []
+        PACKED = False
+        EXTRA = ["-fpack-struct=8", "-mrtd"]
     if miniport:
         SPECS = MINIPORT_SPECS
         BASE = []
@@ -701,7 +731,12 @@ def main():
     owner = {}      # name -> header that declares it
     base = {}       # name -> (gate, text, deps)
     base_order = []
-    for n in ours(cfgdir) if PACKED else ():
+    # mingw-w64's own headers that the WDM ones include first.
+    pres = []
+    for _, pre, _ in SPECS.values():
+        pres += [p for p in pre if p not in pres]
+    for n in ours(cfgdir) if PACKED else \
+            ours(cfgdir, "nt4-ddk", pres) if wdm else ():
         owner[n] = "vxd"
     last = max(list(SPECS).index(w) for w in want)
     for name in list(SPECS)[:last + 1]:
@@ -739,12 +774,14 @@ def main():
                  ", ".join(base_order))
 
 
-def ours(cfgdir):
-    """The names <vxd.h> defines: macros, typedefs and tags."""
-    kit = Kit(cfgdir, "win95-vxd")
+def ours(cfgdir, cfg="win95-vxd", headers=("vxd.h",)):
+    """The names <vxd.h> (or HEADERS, with CFG) defines: macros, typedefs
+    and tags."""
+    kit = Kit(cfgdir, cfg)
     src = os.path.join(kit.tmp, "o.c")
     with open(src, "w") as f:
-        f.write("#include <vxd.h>\n")
+        for h in headers:
+            f.write("#include <%s>\n" % h)
     inc = ["-I", VXD]
     names = set()
     r = run(kit.cmd(*inc, "-E", "-dM", src))
@@ -873,18 +910,23 @@ def write(name, intro, per, files, owner, base, base_order):
     for n in corder:
         owner.setdefault(n, name)
     # Header.
-    guard = "%s_%s_H" % ("VXD" if PACKED else "MINIPORT9X", name.upper())
+    wdm = SPECS is WDM_SPECS
+    guard = "%s_%s_H" % ("VXD" if PACKED else "WDM" if wdm else "MINIPORT9X",
+                         name.upper())
     h = ["/* %s.h: %s\n\n   Made by tools/gen-vxd-headers.py from the names, "
-         "values and layouts\n   in the 95, 98 and ME DDKs; each "
+         "values and layouts\n   in the %s DDKs; each "
          "declaration is under the first\n   %s whose DDK has it. "
-         "*/\n" % (name, intro, GATE),
+         "*/\n" % (name, intro, "2000 and XP" if wdm else "95, 98 and ME",
+                    GATE),
          "#ifndef %s\n#define %s\n\n" % (guard, guard)]
     for i in PRELUDE:
         h.append("#include <%s>\n" % i)
     incs = {i.replace(".h", "") for i in includes}
+    first = []
     if not PACKED:
-        incs |= {i.replace(".h", "") for i in SPECS[name][1]}
-    for i in sorted(incs):
+        # In the order the DDK's header needs them.
+        first = [i.replace(".h", "") for i in SPECS[name][1]]
+    for i in first + sorted(incs - set(first)):
         h.append("#include <%s.h>\n" % i)
     if PACKED:
         h.append("\n#pragma pack(push, 1)\n")
@@ -903,7 +945,8 @@ def write(name, intro, per, files, owner, base, base_order):
         f.write("".join(h))
     # Layout test, from the 98 DDK.
     t = ["/* Made by tools/gen-vxd-headers.py: the layouts of <%s.h> as the "
-         "98 DDK's\n   compiler laid them out. */\n" % name,
+         "%s DDK's\n   compiler laid them out. */\n"
+         % (name, "XP" if wdm else "98"),
          "#define %s %s\n#include <%s.h>\n#include <stddef.h>\n"
          "#ifdef __cplusplus\n#define A(e) static_assert(e, #e);\n#else\n"
          "#define A(e) _Static_assert(e, #e);\n#endif\n"

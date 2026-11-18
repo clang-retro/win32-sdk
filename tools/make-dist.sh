@@ -17,6 +17,8 @@
 #                                   (and except3.S, its libntseh.a),
 #                                   README
 #   share/clang-dos/ddk/            the test driver and its client
+#   share/clang-dos/ddk-include/    the DDK headers mingw-w64 lacks, for
+#                                   fix-ddk-headers.sh
 #   share/clang-dos/vxd/            the test VxD and its client
 #   share/licenses/win32-sdk/       the licences (see NOTICE.md)
 # Sysroots made by tools/import-ms-sdk.py from Microsoft's kits are left
@@ -51,6 +53,7 @@ cp "$here/tools/check-imports.py" "$here/tools/msvcrt-versions.txt" \
   "$here/tools/vxd-link.py" "$here/tools/drvsign.py" \
   "$here/tools/vxd-check.py" "$d/share/clang-dos/"
 cp -R "$here/tests/ddk" "$d/share/clang-dos/ddk"
+cp -R "$here/kernel/include" "$d/share/clang-dos/ddk-include"
 cp -R "$here/vxd" "$d/share/clang-dos/vxd"
 cp "$here/README.md" "$d/share/clang-dos/docs/win32-README.md"
 cp "$here/LICENSE" "$d/share/licenses/win32-sdk/LICENSE"

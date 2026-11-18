@@ -556,7 +556,10 @@ mingw-w64's headers start at Windows 2000 (`NTDDI_VERSION` 0x05000000),
 so `nt4-ddk` declares 2000's kernel API, and some functions it declares
 are not in NT 4.0's kernel. `check-imports.py --nt VERSION` checks a
 32-bit driver's imports from `ntoskrnl.exe`, `hal.dll`, `ndis.sys`,
-`scsiport.sys`, `videoprt.sys` and `tdi.sys` against the exports of each
+`scsiport.sys`, `videoprt.sys`, `tdi.sys`, `win32k.sys` (display
+drivers) and the class drivers (`stream.sys`, `ks.sys`, `portcls.sys`,
+`usbd.sys`, `hidclass.sys`, `hidparse.sys`, `battc.sys`, `1394bus.sys`,
+from the kits that have them) against the exports of each
 NT version from 3.1 to Server 2003 (`tools/kernel-versions.txt`, made by
 `tools/gen-kernel-versions.py` from the import libraries of the NT 3.1,
 NT 4.0, 2000, XP and Server 2003 DDKs; NT 3.5 and 3.51 count as 4.0):
@@ -573,7 +576,12 @@ drivers for it.
 
 `scripts/fix-ddk-headers.sh` fixes a mistake in mingw-w64's `wdm.h`
 (it tests `NTDDI_WINVISTA`, which nothing defines, so drivers for 2000
-and XP got Vista's IRP layout); `build-win9x.sh` and
+and XP got Vista's IRP layout), adds `STREAMAPI` to four `<strmini.h>`
+functions that lack it, makes `<ndis.h>` compile next to `<ntddndis.h>`
+and adds a comma its `NdisMWanIndicateReceiveComplete` lacks. It also
+copies in the DDK headers mingw-w64 lacks, from `kernel/include`
+(`share/clang-dos/ddk-include` in the package): `<hidport.h>`, `<1394.h>`,
+`<ddrawint.h>` and `<d3dnthal.h>`. `build-win9x.sh` and
 `build-modern-sysroot.sh` run it on each sysroot.
 
 Drivers for Windows 95, 98 and ME are mostly VxDs (LE files, below), not
@@ -626,15 +634,62 @@ python3 share/clang-dos/check-imports.py --wdm 98 myusb.sys
 ```
 
 HID drivers link mingw-w64's `-lhidparse` and `-lhidclass` (include
-`<hidusage.h>` before `<hidpi.h>`). mingw-w64 has no `<hidport.h>`, so a
-HID minidriver has to declare `HID_MINIDRIVER_REGISTRATION` itself.
-`wdm9x-exports.txt` also has the functions of USBD.SYS, HIDCLASS.SYS and
+`<hidusage.h>` before `<hidpi.h>`). A HID minidriver includes
+`<hidport.h>` (after `<hidusage.h>` and `<hidclass.h>`, which it
+includes itself), this SDK's own, which mingw-w64 lacks:
+`HID_MINIDRIVER_REGISTRATION` for `HidRegisterMinidriver`,
+`HID_DEVICE_EXTENSION`, the HID descriptor and the internal `IOCTL_HID_*`
+requests. `tools/gen-vxd-headers.py --wdm` made it, and `<1394.h>`, from
+the names, values and layouts of the 2000 and XP DDKs; what only XP has
+is under `_WIN32_WINNT >= 0x0501`. `tests/ddk/wdm-layout/` checks their
+layouts. `wdm9x-exports.txt` also has the functions of USBD.SYS, HIDCLASS.SYS and
 HIDPARSE.SYS, from the 98 DDK's libraries and the drivers of 98 SE and
 ME. 98 SE added `HidP_InitializeReportForID`, `HidP_GetExtendedAttributes`
 and two more. For these drivers and port class, `--wdm 98se` goes by
 98 SE's own driver: it dropped some of 98's functions, such as KS.SYS's
 `KsQuerySoftwareBusInterface`. `tests/ddk/usbdrv.c` is a USB client
-driver and `tests/ddk/hidparse.c` parses HID reports.
+driver, `tests/ddk/hidparse.c` parses HID reports and
+`tests/ddk/hidmini.c` is a HID minidriver.
+
+1394 (FireWire) client drivers send IRBs to the bus driver with
+`IOCTL_1394_CLASS`, declared in `<1394.h>`; 1394BUS.SYS exports nothing
+a client calls, so they need no import library. `tests/ddk/fw1394.c`
+asks for the bus's generation count.
+
+Stream class minidrivers (video capture, TV tuners, `<strmini.h>`) link
+`-lstream`, the import library `build-vxd.sh` makes from
+`tools/stream9x-exports.txt`, as mingw-w64 has none. STREAM.SYS has 19
+functions in 98 and 98 SE, and ME's adds
+`StreamClassFilterReenumerateStreams`.
+`wdm9x-exports.txt` also has USBCAMD.SYS's (for USB cameras) from the
+98 DDK; 98 SE and ME have no list for it, so `--wdm 98se` and `--wdm me`
+warn that they do not check it rather than fail. `tests/ddk/streammini.c`
+registers a minidriver with `StreamClassRegisterAdapter`.
+
+NDIS 5 miniports (network adapters, `<ndis.h>` with `NDIS50_MINIPORT`,
+`-lndis`) are `.sys` files that 98 SE and ME load. 98 SE's NDIS.VXD
+resolves their imports from a table of 277 names in NDIS.VXD itself, not
+from an export table; `gen-wdm-exports.py` reads it from 98 SE's
+NDIS.VXD (found with NDIS.SYM) into `wdm9x-exports.txt`, and
+`--wdm 98se` checks against it. There is no such list for 98 or ME, so
+those two only warn. `tests/ddk/ndismini.c` registers a miniport with
+`NdisMRegisterMiniport`.
+
+Display drivers for NT 4.0 and later are DLLs that import WIN32K.SYS
+(GDI's engine, `<winddi.h>`, `-lwin32k`), with `DrvEnableDriver` as
+their entry point. `check-imports.py --nt` checks their imports against
+NT 4.0's, 2000's and XP's WIN32K.SYS (`EngAlphaBlend` and the rest of
+2000's are not in 4.0's). `<ddrawint.h>`, which `<winddi.h>` needs and
+mingw-w64 lacks, is a stub here that declares its DirectDraw types
+without their members:
+
+```sh
+clang --config=nt4-ddk.cfg -O2 -shared -Wl,--entry,_DrvEnableDriver@12 \
+  mydisp.c -lwin32k -o mydisp.dll
+python3 share/clang-dos/check-imports.py --nt 4.0 mydisp.dll
+```
+
+`tests/ddk/display.c` implements `DrvBitBlt` with `EngBitBlt`.
 
 `tools/mapsym.py` writes a `.SYM` file (MAPSYM's format), which WDEB386
 and SoftICE load. For a driver, it reads the symbols from the image's
