@@ -12,7 +12,8 @@
 # (stream class), avstream.c (AVStream) and ndismini.c (NDIS 5);
 # display.c is built as an NT display driver with a DirectDraw and
 # Direct3D HAL (win32k.sys, check-imports.py --nt); hello.c is built with
-# a PDB for WinDbg (llvm-symbolizer reads it); and miniport.c is
+# a PDB for WinDbg (llvm-symbolizer reads it); hdafunc.c is an HD Audio
+# function driver for XP and later; and miniport.c is
 # built as a SCSI miniport for Windows 9x (check-imports.py --miniport).
 #
 #   CFGDIR   folder with clang and the config files (a toolchain package's
@@ -292,6 +293,28 @@ if [ -f "$CFGDIR/nt4-ddk.cfg" ]; then
       then pass=$((pass + 1)); else bad "$t ${std#* }" $t.log; fi
     done
   done
+fi
+# An HD Audio function driver (hdafunc.c, <hdaudio.h>) on the HD Audio
+# bus driver of XP (with the UAA update) and later: for XP, checked
+# against XP's kernel, and for x64; and <hdaudio.h> in C++.
+for c in winxp-ddk win10-x64-ddk; do
+  [ -f "$CFGDIR/$c.cfg" ] || continue
+  t=hdafunc-$c
+  if ! "$CFGDIR/clang" --config="$CFGDIR/$c.cfg" -O2 -Wall -Wextra -Werror \
+       "$here/hdafunc.c" -o $t.sys >$t.log 2>&1; then
+    bad "$t build" $t.log
+  elif [ $c = winxp-ddk ] &&
+       ! ${PYTHON:-python3} "$check" --nt 5.1 $t.sys >$t.chk 2>&1; then
+    bad "$t check-imports" $t.chk
+  else
+    pass=$((pass + 1))
+  fi
+done
+if [ -f "$CFGDIR/winxp-ddk.cfg" ]; then
+  printf '#include <ntddk.h>\n#include <hdaudio.h>\n' >hdaudio-cxx.cpp
+  if "$CFGDIR/clang++" --config="$CFGDIR/winxp-ddk.cfg" -Wall -Werror \
+       -fsyntax-only hdaudio-cxx.cpp >hdaudio-cxx.log 2>&1
+  then pass=$((pass + 1)); else bad "hdaudio.h c++" hdaudio-cxx.log; fi
 fi
 # WinDbg symbols: with -g -gcodeview and --pdb, lld writes a PDB, and
 # the image's debug directory names it (only its name, with

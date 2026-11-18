@@ -653,6 +653,21 @@ and two more. For these drivers and port class, `--wdm 98se` goes by
 driver, `tests/ddk/hidparse.c` parses HID reports and
 `tests/ddk/hidmini.c` is a HID minidriver.
 
+HD Audio function drivers for Windows XP (with the UAA update,
+KB888111, which brought Microsoft's HD Audio bus driver, HDAUDBUS.SYS),
+Server 2003 and later include `<hdaudio.h>`, which mingw-w64 lacks and
+Microsoft first shipped in the Vista WDK. This SDK's is written from
+Microsoft's public documentation of the HD Audio DDI: the bus interface
+(`HDAUDIO_BUS_INTERFACE`, and `HDAUDIO_BUS_INTERFACE_BDL` for buffer
+descriptor lists) that the driver gets from the bus with
+`IRP_MN_QUERY_INTERFACE`, codec verbs and responses, stream and
+converter formats, and the callbacks. The Vista and later V2 and V3
+interfaces are not in it. No imported kit has the header, so its
+layouts are checked only against the sizes the documentation gives.
+`tests/ddk/hdafunc.c` queries the interface when its device starts,
+reads the controller's information and sends the codec a Get Parameter
+verb.
+
 1394 (FireWire) client drivers send IRBs to the bus driver with
 `IOCTL_1394_CLASS`, declared in `<1394.h>`; 1394BUS.SYS exports nothing
 a client calls, so they need no import library. `tests/ddk/fw1394.c`
