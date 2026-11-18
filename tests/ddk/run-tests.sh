@@ -7,7 +7,7 @@
 # NT 4.0 build is checked as a WDM driver for Windows 98 and ME too
 # (check-imports.py --wdm), as is wdmaudio.c, a WDM audio driver (port
 # class) for 98, 98 SE and ME, usbdrv.c (USB, -lusbd9x, and its .SYM
-# file) and hidparse.c (HID report parsing), and miniport.c is built as a SCSI miniport
+# file, with line numbers with -g) and hidparse.c (HID report parsing), and miniport.c is built as a SCSI miniport
 # for Windows 9x (check-imports.py --miniport).
 #
 #   CFGDIR   folder with clang and the config files (a toolchain package's
@@ -221,6 +221,23 @@ if [ -f usbdrv.sys ]; then
     pass=$((pass + 1))
   else
     bad "usbdrv sym" usbdrv-sym.log
+  fi
+fi
+# With -g, its .SYM file has usbdrv.c's line numbers (from the image's
+# DWARF), one of them where DriverEntry starts.
+if [ -f "$CFGDIR/nt4-ddk.cfg" ]; then
+  if "$CFGDIR/clang" --config="$CFGDIR/nt4-ddk.cfg" -O2 -g -Wall -Werror \
+       "$here/usbdrv.c" -lusbd9x -o usbdrv-g.sys >usbdrv-g.log 2>&1 &&
+     ${PYTHON:-python3} "$(dirname "$check")/mapsym.py" usbdrv-g.sys \
+       >>usbdrv-g.log 2>&1 &&
+     ${PYTHON:-python3} "$(dirname "$check")/mapsym.py" --dump --lines \
+       usbdrv-g.sym >>usbdrv-g.log 2>&1 &&
+     grep -q "^  lines .*usbdrv\.c: [1-9]" usbdrv-g.log &&
+     at=$(grep " _DriverEntry@8\$" usbdrv-g.log | awk '{print $1}') &&
+     grep -q "^    $at [1-9]" usbdrv-g.log; then
+    pass=$((pass + 1))
+  else
+    bad "usbdrv-g sym lines" usbdrv-g.log
   fi
 fi
 # SCSI miniports for Windows 9x (win95-miniport.cfg): miniport.c at each

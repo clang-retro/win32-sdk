@@ -30,7 +30,8 @@ the 16-bit resource format, where the LE header's two Windows resource
 fields point.
 
 --sym writes a .SYM file of the VxD's public and static symbols, for
-WDEB386 and SoftICE (mapsym.py, from JWlink's map file).
+WDEB386 and SoftICE (mapsym.py, from JWlink's map file), with line numbers
+for the objects compiled with -g.
 """
 import argparse
 import os
@@ -196,10 +197,12 @@ def main():
     try:
         r = subprocess.run([jwlink, "@" + directives])
         if r.returncode == 0 and a.sym:
+            # The objects' line numbers too, if they were built with -g.
             r = subprocess.run([sys.executable,
                                 os.path.join(HERE, "mapsym.py"), a.out,
                                 "--map", mapfile, "--name", name,
-                                "-o", a.sym])
+                                "-o", a.sym] +
+                               ["--obj=" + os.path.abspath(f) for f in objs])
     finally:
         os.unlink(directives)
         if mapfile != a.map:

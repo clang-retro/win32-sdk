@@ -639,11 +639,15 @@ driver and `tests/ddk/hidparse.c` parses HID reports.
 `tools/mapsym.py` writes a `.SYM` file (MAPSYM's format), which WDEB386
 and SoftICE load. For a driver, it reads the symbols from the image's
 COFF symbol table, which the linker keeps unless `-s` strips it. That
-includes the static functions and variables, listed by section:
+includes the static functions and variables, listed by section. Built
+with `-g`, the driver also gets line numbers from its DWARF line table, in
+MAPSYM's format: one table of code offsets and source lines for each
+source file:
 
 ```sh
+clang --config=nt4-ddk.cfg -O2 -g myusb.c -lusbd9x -o myusb.sys
 python3 share/clang-dos/mapsym.py myusb.sys      # writes myusb.sym
-python3 share/clang-dos/mapsym.py --dump myusb.sym
+python3 share/clang-dos/mapsym.py --dump --lines myusb.sym
 ```
 
 `tests/ddk/hello.c` is a small driver that makes `\Device\ClangHello` and
@@ -966,7 +970,10 @@ More of what `<vxd.h>` has, each with a sample in `vxd/`:
 
 `vxd-link.py --sym HELLO.SYM` also writes a `.SYM` file for WDEB386 and
 SoftICE. `tools/mapsym.py` makes it from JWlink's map file, with the public
-and static symbols of each object.
+and static symbols of each object. For objects compiled with `-g`, the
+file also gets their line numbers. JWlink leaves the DWARF out of the
+VxD, so `mapsym.py` reads each object's line table and places it using
+the map's symbols.
 
 `vxd-link.py` writes a dynamic VxD by default, the kind Win32 programs
 load with `CreateFile("\\\\.\\C:\\PATH\\HELLO.VXD", ...)` and call

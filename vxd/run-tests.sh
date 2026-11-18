@@ -5,8 +5,9 @@
 # at each level as dynamic ones, linktest.c's, portdrv.c's (a VCOMM port
 # driver) in C99, C17 and C23, iospdr.c's (an IOS port driver) and
 # async.c's (a DeviceIoControl that finishes later), hook.c's (service
-# hooks, and its .SYM file) and bios.c's (nested execution; also with
-# -DVXD_DEBUG) at each level, the subsystem headers (compiled, and their layouts checked), and
+# hooks, and its .SYM file, with line numbers with -g) and bios.c's
+# (nested execution; also with -DVXD_DEBUG) at each level, the subsystem
+# headers (compiled, and their layouts checked), and
 # msddk.c's (msddk31.c's for the 3.1 one) with each ms-*-vxd.cfg (import-ms-sdk.py's VxD kits) in CFGDIR,
 # and check each one with vxd-check.py. No emulator runs VxDs: with WIN9X_RUN,
 # a command that takes a folder holding a VxD and CLIENT.EXE, runs
@@ -119,6 +120,22 @@ for opt in O0 O2 Os; do
     bad "hook-$opt sym" hook-$opt.dump
   fi
 done
+# hook.c with -g: its .SYM file has hook.c's line numbers, from the
+# object's DWARF, one of them at the start of each function.
+vxd hook-g "$here/hook.c" win95-vxd.cfg --dynamic \
+  "--name HOOK --sym hook-g.sym" -- -O2 -g -Wall -Wextra -Werror
+line_at() { # DUMP SYMBOL: is there a line number at SYMBOL's offset?
+  at=$(grep " $2\$" "$1" | awk '{print $1}')
+  [ -n "$at" ] && grep -q "^    $at [1-9]" "$1"
+}
+if $PY "$tools/mapsym.py" --dump --lines hook-g.sym >hook-g.dump 2>&1 &&
+   grep -q "^  lines .*hook\.c: [1-9]" hook-g.dump &&
+   line_at hook-g.dump _time_fn && line_at hook-g.dump _size_fn &&
+   line_at hook-g.dump _vxd_control; then
+  pass=$((pass + 1))
+else
+  bad "hook-g sym lines" hook-g.dump
+fi
 # A VxD that calls the BIOS with nested execution, with and without the
 # debug output macros.
 for opt in O0 O2 Os; do
