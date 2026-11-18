@@ -1,5 +1,6 @@
-# WDM functions of Windows 98 and ME: module, name, the versions
-# whose wdm.lib has it. Made by gen-wdm-exports.py.
+# WDM functions of Windows 98, 98 SE and ME: module, name, the
+# versions whose library or driver has it. Made by
+# gen-wdm-exports.py.
 hal.dll ExAcquireFastMutex 4.10 4.90
 hal.dll ExReleaseFastMutex 4.10 4.90
 hal.dll KeFlushWriteBuffer 4.10 4.90
@@ -22,6 +23,252 @@ hal.dll WRITE_PORT_BUFFER_USHORT 4.10 4.90
 hal.dll WRITE_PORT_UCHAR 4.10 4.90
 hal.dll WRITE_PORT_ULONG 4.10 4.90
 hal.dll WRITE_PORT_USHORT 4.10 4.90
+ks.sys ??0CBaseUnknown@@QAE@ABU_GUID@@PAUIUnknown@@@Z 4.10.2222 4.90
+ks.sys ??0CBaseUnknown@@QAE@PAUIUnknown@@@Z 4.10.2222 4.90
+ks.sys ??1CBaseUnknown@@UAE@XZ 4.10.2222 4.90
+ks.sys ??_FCBaseUnknown@@QAEXXZ 4.10.2222 4.90
+ks.sys ?IndirectedAddRef@CBaseUnknown@@UAGKXZ 4.10.2222 4.90
+ks.sys ?IndirectedQueryInterface@CBaseUnknown@@UAGJABU_GUID@@PAPAX@Z 4.10.2222 4.90
+ks.sys ?IndirectedRelease@CBaseUnknown@@UAGKXZ 4.10.2222 4.90
+ks.sys ?NonDelegatedAddRef@CBaseUnknown@@UAGKXZ 4.10.2222 4.90
+ks.sys ?NonDelegatedQueryInterface@CBaseUnknown@@UAGJABU_GUID@@PAPAX@Z 4.10.2222 4.90
+ks.sys ?NonDelegatedRelease@CBaseUnknown@@UAGKXZ 4.10.2222 4.90
+ks.sys KoCreateInstance 4.10 4.10.2222 4.90
+ks.sys KoDecrementObjectCount 4.10
+ks.sys KoDeviceInitialize 4.10.2222 4.90
+ks.sys KoDriverInitialize 4.10 4.10.2222 4.90
+ks.sys KoRelease 4.10.2222 4.90
+ks.sys KsAcquireControl 4.10.2222 4.90
+ks.sys KsAcquireDevice 4.10.2222 4.90
+ks.sys KsAcquireDeviceSecurityLock 4.10 4.10.2222 4.90
+ks.sys KsAcquireResetValue 4.10 4.10.2222 4.90
+ks.sys KsAddDevice 4.10.2222 4.90
+ks.sys KsAddEvent 4.90
+ks.sys KsAddIrpToCancelableQueue 4.10 4.10.2222 4.90
+ks.sys KsAddItemToObjectBag 4.10.2222 4.90
+ks.sys KsAddObjectCreateItemToDeviceHeader 4.10 4.10.2222 4.90
+ks.sys KsAddObjectCreateItemToObjectHeader 4.10 4.10.2222 4.90
+ks.sys KsAdvanceBytePosition 4.10.2222
+ks.sys KsAdvanceMappings 4.10.2222
+ks.sys KsAllocateDefaultClock 4.10 4.10.2222 4.90
+ks.sys KsAllocateDefaultClockEx 4.10.2222 4.90
+ks.sys KsAllocateDeviceHeader 4.10 4.10.2222 4.90
+ks.sys KsAllocateExtraData 4.10 4.10.2222 4.90
+ks.sys KsAllocateObjectBag 4.90
+ks.sys KsAllocateObjectCreateItem 4.10.2222 4.90
+ks.sys KsAllocateObjectHeader 4.10 4.10.2222 4.90
+ks.sys KsAllocatorGetParentPin 4.10.2222
+ks.sys KsCacheMedium 4.90
+ks.sys KsCancelIo 4.10 4.10.2222 4.90
+ks.sys KsCancelRoutine 4.10 4.10.2222 4.90
+ks.sys KsClockGetParentPin 4.10.2222
+ks.sys KsCompletePendingRequest 4.10.2222 4.90
+ks.sys KsCopyObjectBagItems 4.90
+ks.sys KsCreateAllocator 4.10 4.10.2222 4.90
+ks.sys KsCreateBusEnumObject 4.10.2222 4.90
+ks.sys KsCreateClock 4.10 4.10.2222 4.90
+ks.sys KsCreateDefaultAllocator 4.10 4.10.2222 4.90
+ks.sys KsCreateDefaultAllocatorEx 4.90
+ks.sys KsCreateDefaultClock 4.10 4.10.2222 4.90
+ks.sys KsCreateDefaultSecurity 4.10 4.10.2222 4.90
+ks.sys KsCreateDevice 4.90
+ks.sys KsCreateFilterFactory 4.10.2222 4.90
+ks.sys KsCreateMdlForProperty 4.10
+ks.sys KsCreatePin 4.10 4.10.2222 4.90
+ks.sys KsCreateTopologyNode 4.10 4.10.2222 4.90
+ks.sys KsDecrementCountedWorker 4.10.2222 4.90
+ks.sys KsDecrementExistingObjectCount 4.10.2222
+ks.sys KsDefaultAddEventHandler 4.90
+ks.sys KsDefaultDeviceIoCompletion 4.10 4.10.2222 4.90
+ks.sys KsDefaultDispatchPnp 4.10 4.10.2222 4.90
+ks.sys KsDefaultDispatchPower 4.10 4.10.2222 4.90
+ks.sys KsDefaultForwardIrp 4.10 4.10.2222 4.90
+ks.sys KsDereferenceBusObject 4.10.2222 4.90
+ks.sys KsDereferenceSoftwareBusObject 4.10 4.10.2222 4.90
+ks.sys KsDeviceGetBusData 4.90
+ks.sys KsDeviceRegisterAdapterObject 4.90
+ks.sys KsDeviceSetBusData 4.90
+ks.sys KsDisableEvent 4.10 4.10.2222 4.90
+ks.sys KsDiscardEvent 4.10 4.10.2222 4.90
+ks.sys KsDispatchFastIoDeviceControlFailure 4.10 4.10.2222 4.90
+ks.sys KsDispatchFastReadFailure 4.10 4.10.2222 4.90
+ks.sys KsDispatchInvalidDeviceRequest 4.10 4.10.2222 4.90
+ks.sys KsDispatchIrp 4.10 4.10.2222 4.90
+ks.sys KsDispatchQuerySecurity 4.10 4.10.2222 4.90
+ks.sys KsDispatchSetSecurity 4.10 4.10.2222 4.90
+ks.sys KsDispatchSpecificMethod 4.10 4.10.2222 4.90
+ks.sys KsDispatchSpecificProperty 4.10 4.10.2222 4.90
+ks.sys KsEnableEvent 4.10 4.10.2222 4.90
+ks.sys KsEnableEventWithAllocator 4.10.2222 4.90
+ks.sys KsFastMethodHandler 4.10 4.10.2222 4.90
+ks.sys KsFastPropertyHandler 4.10 4.10.2222 4.90
+ks.sys KsFilterAcquireProcessingMutex 4.90
+ks.sys KsFilterAllowProcessing 4.10.2222
+ks.sys KsFilterAttemptProcessing 4.10.2222 4.90
+ks.sys KsFilterFactoryAddCreateItem 4.10.2222 4.90
+ks.sys KsFilterFactoryGetParentDevice 4.10.2222
+ks.sys KsFilterFactoryGetSymbolicLink 4.90
+ks.sys KsFilterFactorySetDeviceClassesState 4.10.2222 4.90
+ks.sys KsFilterGetAndGate 4.90
+ks.sys KsFilterGetChildPinCount 4.10.2222 4.90
+ks.sys KsFilterGetFirstChildPin 4.10.2222 4.90
+ks.sys KsFilterGetParentFilterFactory 4.10.2222
+ks.sys KsFilterPreventProcessing 4.10.2222
+ks.sys KsFilterRegisterPowerCallbacks 4.90
+ks.sys KsFilterReleaseProcessingMutex 4.90
+ks.sys KsForwardAndCatchIrp 4.10 4.10.2222 4.90
+ks.sys KsForwardIrp 4.10 4.10.2222 4.90
+ks.sys KsFreeDefaultClock 4.10 4.10.2222 4.90
+ks.sys KsFreeDeviceHeader 4.10 4.10.2222 4.90
+ks.sys KsFreeEventList 4.10 4.10.2222 4.90
+ks.sys KsFreeObjectBag 4.90
+ks.sys KsFreeObjectCreateItem 4.10.2222 4.90
+ks.sys KsFreeObjectCreateItemsByContext 4.10.2222 4.90
+ks.sys KsFreeObjectHeader 4.10 4.10.2222 4.90
+ks.sys KsGenerateDataEvent 4.10 4.10.2222 4.90
+ks.sys KsGenerateEvent 4.10 4.10.2222 4.90
+ks.sys KsGenerateEventList 4.10 4.10.2222 4.90
+ks.sys KsGenerateEvents 4.90
+ks.sys KsGetBusEnumIdentifier 4.10.2222 4.90
+ks.sys KsGetBusEnumParentFDOFromChildPDO 4.10.2222 4.90
+ks.sys KsGetBusEnumPnpDeviceObject 4.10.2222 4.90
+ks.sys KsGetChildCreateParameter 4.10 4.10.2222
+ks.sys KsGetDefaultClockState 4.10 4.10.2222 4.90
+ks.sys KsGetDefaultClockTime 4.10 4.10.2222 4.90
+ks.sys KsGetDevice 4.90
+ks.sys KsGetDeviceForDeviceObject 4.10.2222 4.90
+ks.sys KsGetFilterFromIrp 4.90
+ks.sys KsGetFirstChild 4.90
+ks.sys KsGetNextSibling 4.90
+ks.sys KsGetNodeIdFromIrp 4.90
+ks.sys KsGetObjectFromFileObject 4.90
+ks.sys KsGetObjectFromIrp 4.10.2222
+ks.sys KsGetObjectTypeFromFileObject 4.90
+ks.sys KsGetObjectTypeFromIrp 4.10.2222 4.90
+ks.sys KsGetParent 4.90
+ks.sys KsGetPinFromIrp 4.90
+ks.sys KsHandleAutomationIoControl 4.10.2222
+ks.sys KsHandleSizedListQuery 4.10 4.10.2222 4.90
+ks.sys KsIncrementCountedWorker 4.10.2222 4.90
+ks.sys KsIncrementExistingObjectCount 4.10.2222
+ks.sys KsInitializeDevice 4.10.2222 4.90
+ks.sys KsInitializeDriver 4.10.2222 4.90
+ks.sys KsInstallBusEnumInterface 4.10.2222 4.90
+ks.sys KsIsBusEnumChildDevice 4.10.2222 4.90
+ks.sys KsMergeAutomationTables 4.10.2222 4.90
+ks.sys KsMethodHandler 4.10 4.10.2222 4.90
+ks.sys KsMethodHandlerWithAllocator 4.10.2222 4.90
+ks.sys KsMoveIrpsOnCancelableQueue 4.10 4.10.2222 4.90
+ks.sys KsNodeGetParentFilter 4.10.2222
+ks.sys KsNodeGetParentPin 4.10.2222
+ks.sys KsNullDriverUnload 4.10 4.10.2222 4.90
+ks.sys KsPinAcquireLeadingEdge 4.10.2222
+ks.sys KsPinAcquireProcessingMutex 4.90
+ks.sys KsPinAcquireTrailingEdge 4.10.2222
+ks.sys KsPinAdvanceTrailingEdgeBytePosition 4.10.2222
+ks.sys KsPinAllowProcessing 4.10.2222
+ks.sys KsPinAttachAndGate 4.90
+ks.sys KsPinAttachOrGate 4.90
+ks.sys KsPinAttemptProcessing 4.10.2222 4.90
+ks.sys KsPinDataIntersection 4.10 4.10.2222 4.90
+ks.sys KsPinGetAndGate 4.90
+ks.sys KsPinGetAvailableByteCount 4.90
+ks.sys KsPinGetConnectedFilterInterface 4.10.2222 4.90
+ks.sys KsPinGetConnectedPinFileObject 4.90
+ks.sys KsPinGetConnectedPinInterface 4.10.2222 4.90
+ks.sys KsPinGetFirstCloneStreamPointer 4.90
+ks.sys KsPinGetLeadingEdgeStreamPointer 4.90
+ks.sys KsPinGetNextSiblingPin 4.10.2222 4.90
+ks.sys KsPinGetParentFilter 4.10.2222 4.90
+ks.sys KsPinGetReferenceClockInterface 4.90
+ks.sys KsPinGetTrailingEdgeStreamPointer 4.90
+ks.sys KsPinPreventProcessing 4.10.2222
+ks.sys KsPinPropertyHandler 4.10 4.10.2222 4.90
+ks.sys KsPinRegisterFrameReturnCallback 4.90
+ks.sys KsPinRegisterHandshakeCallback 4.90
+ks.sys KsPinRegisterPowerCallbacks 4.90
+ks.sys KsPinReleaseProcessingMutex 4.90
+ks.sys KsPinSetPinClockTime 4.90
+ks.sys KsPinSubmitFrame 4.90
+ks.sys KsPinSubmitFrameMdl 4.90
+ks.sys KsProbeStreamIrp 4.10 4.10.2222 4.90
+ks.sys KsPropertyHandler 4.10 4.10.2222 4.90
+ks.sys KsPropertyHandlerWithAllocator 4.10.2222 4.90
+ks.sys KsQueryDefaultClockOwnerFileObject 4.10.2222
+ks.sys KsQueryDevicePnpObject 4.10 4.10.2222 4.90
+ks.sys KsQueryInformationFile 4.10 4.10.2222 4.90
+ks.sys KsQueryObjectAccessMask 4.10 4.10.2222 4.90
+ks.sys KsQueryObjectCreateItem 4.10 4.10.2222 4.90
+ks.sys KsQuerySoftwareBusInterface 4.10
+ks.sys KsQueueSetByteOffset 4.10.2222
+ks.sys KsQueueSetMappingIndex 4.10.2222
+ks.sys KsQueueWorkItem 4.10 4.10.2222 4.90
+ks.sys KsReadFile 4.10 4.10.2222 4.90
+ks.sys KsRecalculateStackDepth 4.10 4.10.2222 4.90
+ks.sys KsReferenceBusObject 4.10.2222 4.90
+ks.sys KsReferenceSoftwareBusObject 4.10 4.10.2222 4.90
+ks.sys KsRegisterAggregatedClientUnknown 4.90
+ks.sys KsRegisterCountedWorker 4.10.2222 4.90
+ks.sys KsRegisterFilterWithNoKSPins 4.90
+ks.sys KsRegisterWorker 4.10 4.10.2222 4.90
+ks.sys KsReleaseControl 4.10.2222 4.90
+ks.sys KsReleaseDevice 4.10.2222 4.90
+ks.sys KsReleaseDeviceSecurityLock 4.10 4.10.2222 4.90
+ks.sys KsReleaseIrpOnCancelableQueue 4.10 4.10.2222 4.90
+ks.sys KsReleaseLeadingEdge 4.10.2222
+ks.sys KsReleaseTrailingEdge 4.10.2222
+ks.sys KsRemoveBusEnumInterface 4.10.2222 4.90
+ks.sys KsRemoveIrpFromCancelableQueue 4.10 4.10.2222 4.90
+ks.sys KsRemoveItemFromObjectBag 4.10.2222 4.90
+ks.sys KsRemoveSpecificIrpFromCancelableQueue 4.10 4.10.2222 4.90
+ks.sys KsServiceBusEnumCreateRequest 4.10.2222 4.90
+ks.sys KsServiceBusEnumPnpRequest 4.10.2222 4.90
+ks.sys KsSetDefaultClockState 4.10 4.10.2222 4.90
+ks.sys KsSetDefaultClockTime 4.10 4.10.2222 4.90
+ks.sys KsSetDevicePnpAndBaseObject 4.10 4.10.2222 4.90
+ks.sys KsSetInformationFile 4.10 4.10.2222 4.90
+ks.sys KsSetMajorFunctionHandler 4.10 4.10.2222 4.90
+ks.sys KsSetPacketIndex 4.10.2222
+ks.sys KsSetPowerDispatch 4.10 4.10.2222 4.90
+ks.sys KsSetTargetDeviceObject 4.10 4.10.2222 4.90
+ks.sys KsSetTargetState 4.10 4.10.2222 4.90
+ks.sys KsStreamIo 4.10 4.10.2222 4.90
+ks.sys KsStreamPointerAdvance 4.90
+ks.sys KsStreamPointerAdvanceOffsets 4.90
+ks.sys KsStreamPointerAdvanceOffsetsAndUnlock 4.90
+ks.sys KsStreamPointerCancelTimeout 4.90
+ks.sys KsStreamPointerClone 4.90
+ks.sys KsStreamPointerDelete 4.90
+ks.sys KsStreamPointerGetIrp 4.90
+ks.sys KsStreamPointerGetMdl 4.90
+ks.sys KsStreamPointerGetNextClone 4.90
+ks.sys KsStreamPointerLock 4.90
+ks.sys KsStreamPointerScheduleTimeout 4.90
+ks.sys KsStreamPointerUnlock 4.90
+ks.sys KsSynchronousIoControlDevice 4.10 4.10.2222 4.90
+ks.sys KsTerminateDevice 4.10.2222 4.90
+ks.sys KsTerminatePacket 4.10.2222
+ks.sys KsTopologyPropertyHandler 4.10 4.10.2222 4.90
+ks.sys KsUnregisterWorker 4.10 4.10.2222 4.90
+ks.sys KsUnserializeObjectPropertiesFromRegistry 4.10 4.10.2222 4.90
+ks.sys KsValidateAllocatorCreateRequest 4.10 4.10.2222 4.90
+ks.sys KsValidateAllocatorFramingEx 4.10.2222 4.90
+ks.sys KsValidateClockCreateRequest 4.10 4.10.2222 4.90
+ks.sys KsValidateConnectRequest 4.10 4.10.2222 4.90
+ks.sys KsValidateTopologyNodeCreateRequest 4.10 4.10.2222 4.90
+ks.sys KsWriteFile 4.10 4.10.2222 4.90
+ks.sys KsiDefaultClockAddMarkEvent 4.10 4.10.2222 4.90
+ks.sys KsiPropertyDefaultClockGetCorrelatedPhysicalTime 4.10 4.10.2222 4.90
+ks.sys KsiPropertyDefaultClockGetCorrelatedTime 4.10 4.10.2222 4.90
+ks.sys KsiPropertyDefaultClockGetFunctionTable 4.10 4.10.2222 4.90
+ks.sys KsiPropertyDefaultClockGetParent 4.10
+ks.sys KsiPropertyDefaultClockGetPhysicalTime 4.10 4.10.2222 4.90
+ks.sys KsiPropertyDefaultClockGetResolution 4.10 4.10.2222 4.90
+ks.sys KsiPropertyDefaultClockGetState 4.10 4.10.2222 4.90
+ks.sys KsiPropertyDefaultClockGetTime 4.10 4.10.2222 4.90
+ks.sys KsiQueryObjectCreateItemsPresent 4.10.2222 4.90
+ks.sys _KsEdit 4.10.2222 4.90
+ks.sys _KsGenerateEvents 4.10.2222
 ntoskrnl.exe DbgBreakPoint 4.10 4.90
 ntoskrnl.exe DbgPrint 4.10 4.90
 ntoskrnl.exe ExAcquireFastMutexUnsafe 4.10 4.90
@@ -348,3 +595,59 @@ ntoskrnl.exe wcsspn 4.10 4.90
 ntoskrnl.exe wcsstr 4.10 4.90
 ntoskrnl.exe wcstombs 4.10 4.90
 ntoskrnl.exe wctomb 4.10 4.90
+portcls.sys KsoDispatchCreateWithGenericFactory 4.10 4.10.2222 4.90
+portcls.sys KsoGetIrpTargetFromFileObject 4.10.2222 4.90
+portcls.sys KsoGetIrpTargetFromIrp 4.10 4.10.2222 4.90
+portcls.sys PcAcquireFormatResources 4.10 4.10.2222 4.90
+portcls.sys PcAddAdapterDevice 4.10 4.10.2222 4.90
+portcls.sys PcAddContentHandlers 4.90
+portcls.sys PcAddToEventTable 4.10.2222 4.90
+portcls.sys PcAddToPropertyTable 4.10 4.10.2222 4.90
+portcls.sys PcCaptureFormat 4.10 4.10.2222 4.90
+portcls.sys PcCompletePendingEventRequest 4.10.2222 4.90
+portcls.sys PcCompletePendingPropertyRequest 4.10 4.10.2222 4.90
+portcls.sys PcCreateContentMixed 4.90
+portcls.sys PcCreateSubdeviceDescriptor 4.10 4.10.2222 4.90
+portcls.sys PcDeleteSubdeviceDescriptor 4.10 4.10.2222 4.90
+portcls.sys PcDestroyContent 4.90
+portcls.sys PcDispatchIrp 4.10 4.10.2222 4.90
+portcls.sys PcDmaMasterDescription 4.10 4.10.2222 4.90
+portcls.sys PcDmaSlaveDescription 4.10 4.10.2222 4.90
+portcls.sys PcForwardContentToDeviceObject 4.90
+portcls.sys PcForwardContentToFileObject 4.90
+portcls.sys PcForwardContentToInterface 4.90
+portcls.sys PcForwardIrpSynchronous 4.10 4.10.2222 4.90
+portcls.sys PcFreeEventTable 4.10.2222 4.90
+portcls.sys PcFreePropertyTable 4.10 4.10.2222 4.90
+portcls.sys PcGenerateEventDeferredRoutine 4.10.2222 4.90
+portcls.sys PcGenerateEventList 4.10.2222 4.90
+portcls.sys PcGetContentRights 4.90
+portcls.sys PcGetDeviceProperty 4.10 4.10.2222 4.90
+portcls.sys PcGetTimeInterval 4.10 4.10.2222 4.90
+portcls.sys PcHandleDisableEventWithTable 4.10.2222 4.90
+portcls.sys PcHandleEnableEventWithTable 4.10.2222 4.90
+portcls.sys PcHandlePropertyWithTable 4.10 4.10.2222 4.90
+portcls.sys PcInitializeAdapterDriver 4.10 4.10.2222 4.90
+portcls.sys PcNewDmaChannel 4.10 4.10.2222 4.90
+portcls.sys PcNewInterruptSync 4.10 4.10.2222 4.90
+portcls.sys PcNewIrpStreamPhysical 4.10 4.10.2222 4.90
+portcls.sys PcNewIrpStreamVirtual 4.10 4.10.2222 4.90
+portcls.sys PcNewMiniport 4.10 4.10.2222 4.90
+portcls.sys PcNewPort 4.10 4.10.2222 4.90
+portcls.sys PcNewRegistryKey 4.10 4.10.2222 4.90
+portcls.sys PcNewResourceList 4.10 4.10.2222 4.90
+portcls.sys PcNewResourceSublist 4.10 4.10.2222 4.90
+portcls.sys PcNewServiceGroup 4.10 4.10.2222 4.90
+portcls.sys PcPinPropertyHandler 4.10 4.10.2222 4.90
+portcls.sys PcRegisterAdapterPowerManagement 4.10 4.10.2222 4.90
+portcls.sys PcRegisterIoTimeout 4.90
+portcls.sys PcRegisterIrpHandler 4.10 4.10.2222
+portcls.sys PcRegisterPhysicalConnection 4.10 4.10.2222 4.90
+portcls.sys PcRegisterPhysicalConnectionFromExternal 4.10 4.10.2222 4.90
+portcls.sys PcRegisterPhysicalConnectionToExternal 4.10 4.10.2222 4.90
+portcls.sys PcRegisterSubdevice 4.10 4.10.2222 4.90
+portcls.sys PcRequestNewPowerState 4.10 4.10.2222 4.90
+portcls.sys PcTerminateConnection 4.10 4.10.2222 4.90
+portcls.sys PcUnregisterIoTimeout 4.90
+portcls.sys PcValidateConnectRequest 4.10 4.10.2222 4.90
+portcls.sys PcVerifyFilterIsReady 4.10 4.10.2222 4.90

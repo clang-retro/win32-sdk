@@ -6,6 +6,9 @@
 #                              tools/gen-vxd-headers.py made (configmg.h,
 #                              ifs.h, ios.h, ndis.h ...), which
 #                              win95-vxd.cfg adds to the include path
+#   $SYSROOT/include/miniport9x/  the SCSI miniport headers, and
+#   $SYSROOT/lib/libscsiport9x.a  their import library (win95-miniport.cfg)
+#   $SYSROOT/lib/libportcls.a  PORTCLS.SYS's, for WDM audio drivers
 #   $SYSROOT/include/vxdsvc.h  the services' numbers (tools/vxd-services.txt)
 #   $SYSROOT/lib/libvxd.a      memcpy, memset and the like for VxDs, the
 #                              Microsoft target's 64-bit division helpers,
@@ -22,6 +25,21 @@ WORK=${WORK:-$PWD/build-vxd}
 mkdir -p "$WORK" "$SYSROOT/include/vxd" "$SYSROOT/lib"
 cp "$here/vxd/vxd.h" "$SYSROOT/include/"
 cp "$here/vxd/vcomm.h" "$here"/vxd/include/*.h "$SYSROOT/include/vxd/"
+# SCSI miniports (win95-miniport.cfg): the 9x miniport.h, srb.h and scsi.h,
+# and libscsiport9x.a, the import library of the SCSIPORT.SYS functions
+# 9x's SCSIPORT.PDR has.
+mkdir -p "$SYSROOT/include/miniport9x"
+cp "$here"/miniport/include/*.h "$SYSROOT/include/miniport9x/"
+{ echo "LIBRARY SCSIPORT.SYS"; echo "EXPORTS"
+  grep -v '^#' "$here/tools/scsiport9x-exports.txt"; } >"$WORK/scsiport9x.def"
+"$BIN/llvm-dlltool" -m i386 -k -d "$WORK/scsiport9x.def" \
+  -l "$SYSROOT/lib/libscsiport9x.a"
+# WDM audio drivers (nt4-ddk.cfg, -lportcls): the import library of the
+# PORTCLS.SYS functions 98, 98 SE and ME have, which mingw-w64 lacks.
+{ echo "LIBRARY PORTCLS.SYS"; echo "EXPORTS"
+  grep -v '^#' "$here/tools/portcls9x-exports.txt"; } >"$WORK/portcls.def"
+"$BIN/llvm-dlltool" -m i386 -k -d "$WORK/portcls.def" \
+  -l "$SYSROOT/lib/libportcls.a"
 rm -rf "$WORK/stubs"
 python3 "$here/tools/gen-vxd-wraps.py" --header "$SYSROOT/include/vxdsvc.h" \
   --stubs "$WORK/stubs"

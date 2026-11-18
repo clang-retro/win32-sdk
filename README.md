@@ -581,12 +581,34 @@ PE ones. WDM drivers for 98 and ME are PE `.sys` files that NTKERN.VXD
 loads. It gives them only part of the kernel API, the functions of the
 98 and ME DDKs' `wdm.lib`, and runs only drivers with a native subsystem
 version of 4.x or older. `nt4-ddk.cfg` builds such drivers, and
-`check-imports.py --wdm 98` (or `--wdm me`) checks both things. The
+`check-imports.py --wdm 98` (or `--wdm 98se`, `--wdm me`) checks both things. The
 function list is `tools/wdm9x-exports.txt`, which
 `tools/gen-wdm-exports.py` makes from those two libraries. 98 has 336
 functions and ME 346. ME has 12 that 98 lacks, such as `ExCreateCallback`
 and `RtlZeroMemory`, and lacks two of 98's. The `ms-w98-wdm` kit (below)
 builds with the 98 DDK's own `wdm.h`.
+
+WDM audio drivers (port class miniports) build the same way, with
+mingw-w64's `<portcls.h>` and `-lportcls`, the import library
+`build-vxd.sh` makes of the PORTCLS.SYS functions
+(`tools/portcls9x-exports.txt`) that mingw-w64 lacks:
+
+```sh
+clang --config=nt4-ddk.cfg -O2 mydriver.c -lportcls -o mydriver.sys
+python3 share/clang-dos/check-imports.py --wdm 98se mydriver.sys
+```
+
+Port class and kernel streaming (KS.SYS) grew in each version: 98's
+PORTCLS.SYS has 39 functions, 98 Second Edition's 47 (the event
+functions, `PcAddToEventTable` and the rest) and ME's 55 (the DRM ones,
+`PcAddContentHandlers` and the rest, and `PcRegisterIoTimeout`), and
+`wdm9x-exports.txt` has each version's, from the 98 DDK's `portcls.lib`
+and `ks.lib` and the drivers of 98 SE and ME. `--wdm 98se` checks for
+98 SE, which has 98's kernel functions. `tests/ddk/wdmaudio.c` is an
+adapter driver that makes a topology port when its device starts, in C.
+`scripts/fix-ddk-headers.sh` makes `ksmedia.h` (which `<portcls.h>`
+includes) compile in kernel mode, where nothing defines the `TCHAR` of
+its `TRANSPORTBASICPARMS`.
 
 `tests/ddk/hello.c` is a small driver that makes `\Device\ClangHello` and
 answers an IOCTL with a 64-bit computation and whether its `__except`
@@ -646,6 +668,46 @@ Wine's `WinVerifyTrust` accepts the signatures and rejects ones whose
 file or signature was changed. The test driver itself is signed in the
 tests, and still loads in Wine; real Windows in test mode is still to be
 tried.
+
+### SCSI miniports for Windows 95, 98 and ME
+
+Windows 9x drives SCSI host adapters (and many IDE and RAID ones) with the
+same kind of miniport as Windows NT. A 9x miniport is a `.mpd` file:
+
+* a PE image with the native subsystem, version 4.0;
+* with the entry point `DriverEntry`;
+* importing only `SCSIPORT.SYS`, which 9x's `SCSIPORT.PDR` provides.
+
+`SCSIPORT.PDR` has the structures of NT 3.51. Its `HW_INITIALIZATION_DATA`
+is 76 bytes and its `PORT_CONFIGURATION_INFORMATION` is 124. mingw-w64's
+DDK headers have Windows 2000's (80 and 140 bytes), which it refuses.
+`win95-miniport.cfg` uses 9x's headers instead:
+
+```sh
+clang --config=win95-miniport.cfg -O2 myadapter.c -o myadapter.mpd
+python3 share/clang-dos/check-imports.py --miniport myadapter.mpd
+```
+
+* `<miniport.h>`, `<srb.h>` and `<scsi.h>` (in
+  `sysroots/win9x-msvcrt/include/miniport9x`) have the 95, 98 and ME DDKs'
+  types, constants and structures, and the `ScsiPort*` prototypes. The
+  three DDKs agree on them. `tools/gen-vxd-headers.py --miniport` made
+  them from the DDKs' `block/inc`, as for the VxD headers, and
+  `tests/ddk/miniport-layout/*.c` checks their layouts.
+* Functions and callbacks are stdcall (`-mrtd`), as the DDK builds them
+  with `cl -Gz`. `ScsiPortNotification` and `ScsiDebugPrint` take variable
+  arguments, so they are cdecl.
+* `libscsiport9x.a` imports the 45 functions that `SCSIPORT.PDR` has
+  (`tools/scsiport9x-exports.txt`, from the 95 and 98 DDKs' import
+  libraries). `libvxd.a` has `memcpy`, `memset` and the like.
+* `check-imports.py --miniport` checks the subsystem and that each import
+  is one of those 45.
+
+`tests/ddk/miniport.c` is a virtual adapter with no hardware: its target
+0 answers INQUIRY as a processor device. `run-tests.sh` builds it at
+`-O0`, `-O2` and `-Os` and checks it. A miniport is installed with an INF
+for the SCSI adapter class, as the DDK's samples are. Nothing loads one
+in Wine, so real Windows 9x is the test.
 
 ### VxDs for Windows 3.1, 95, 98 and ME
 
@@ -760,6 +822,8 @@ typedefs, under the same names as the DDK's:
 | `ior.h`, `blockdev.h`, `drp.h`, `ilb.h`, `sgd.h`, `med.h`, `vrp.h`, `aep.h`, `isp.h`, `irs.h`, `ios.h`, `dcb.h`, `iop.h`, `ida.h`, `ddb.h`, `dvt.h`, `ivt.h` | IOS and the layered block device drivers (`.PDR` port drivers and the rest) |
 | `ndis.h`, `netvxd.h` | NDIS 3.1 network drivers (from the 95 and 98 DDKs; ME's `ndis.h` is NDIS 5's, for WDM) |
 | `minivdd.h` | display mini-VDDs |
+| `mmdevldr.h` | MMDEVLDR, which loads sound cards' VxDs and 16-bit drivers (its services, `MMDEVLDR_Register_Device_Driver` and `_MMDEVLDR_SetDevicePresence` and the rest, are in `<vxdsvc.h>`) |
+| `vkd.h`, `vmd.h` | the keyboard (`SS_*` shift states, the hot key flags, `Paste_Rec`) and the mouse (`VMD_Type_*`, `Mouse_Instance`, the cursor drawing VxD structures) |
 
 Each declaration is under `#if VXD_WINVER >=` the first DDK that has
 it, and one that changed between DDKs (a count of functions that grew, a
@@ -779,6 +843,26 @@ python3 tools/gen-vxd-headers.py --kits ~/kits PACKAGE/bin
 
 with the `ms-w95-vxd`, `ms-w98-vxd` and `ms-me-vxd` kits imported into
 PACKAGE and `~/kits` the folder `import-ms-sdk.py` read them from.
+
+The DDKs have VKD's, VMOUSE's and MMDEVLDR's only as MASM include files
+(`vkd.inc`, `vkdpaste.inc`, `vmd.inc`, `mmdevldr.inc`), so
+`tools/gen-vxd-inc.py PACKAGE/bin` makes `vkd.h`, `vmd.h` and `mmdevldr.h`: it evaluates their `EQU`s, writing each as the number
+it comes to, and lays out their `STRUC`s and `UNION`s byte-packed as MASM
+does, for `vxd/layout/vkd.c` and `vmd.c` to check.
+
+An IOS port driver (`.PDR`, which IOS loads from `SYSTEM\IOSUBSYS` at
+boot) is a dynamic VxD whose `Sys_Dynamic_Device_Init` calls
+`IOS_Register` with its `DRP` (`<drp.h>`): the DRP names its load group
+(`DRP_LGN`), its async event routine and the `ILB` (`<ilb.h>`) IOS fills in.
+IOS then calls the routine with each `AEP` (`<aep.h>`), and the driver asks
+IOS for things with ISPs (`<isp.h>`) through `ILB_service_rtn`. For
+example, `vxd/iospdr.c` is a port driver with no devices that does this
+and records the events it got in the registry:
+
+```sh
+clang --config=win95-vxd.cfg -O2 -c iospdr.c -o iospdr.o
+python3 share/clang-dos/vxd-link.py --name IOSPDR -o IOSPDR.PDR iospdr.o
+```
 
 `vxd-link.py --version 1.2.3.4` adds a VERSIONINFO resource the way
 Microsoft's VxDs carry one, with `--product-version`, `--description`,

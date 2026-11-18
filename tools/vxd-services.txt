@@ -1355,6 +1355,13 @@ ACPI 0x004C 0x0019 _ACPI_FreeTaskFileBuffer c 4.10
 ACPI 0x004C 0x001A _ACPI_ResumeComplete c 4.10
 ACPI 0x004C 0x001A _ACPI_Obsolete7 c 4.90
 ACPI 0x004C 0x001B _ACPI_Enter_Leave_Locked_Phase c 4.90
+MMDEVLDR 0x044A 0x0000 MMDEVLDR_Register_Device_Driver reg 4.00
+MMDEVLDR 0x044A 0x0001 _MMDEVLDR_SetDevicePresence c 4.00
+MMDEVLDR 0x044A 0x0002 _MMDEVLDR_SetEnvironmentString c 4.00
+MMDEVLDR 0x044A 0x0003 _MMDEVLDR_GetEnvironmentString c 4.00
+MMDEVLDR 0x044A 0x0004 _MMDEVLDR_RemoveEnvironmentString c 4.00
+MMDEVLDR 0x044A 0x0005 _MMDEVLDR_AddEnvironmentString c 4.00
+MMDEVLDR 0x044A 0x0006 _MMDEVLDR_DeviceInitComplete c 4.10
 VREDIR 0x0481 0x0000 VRedir_Get_Version reg 4.00
 VREDIR 0x0481 0x0001 VRedir_Register reg 4.00
 VREDIR 0x0481 0x0002 VRedir_MakeMailSlot reg 4.00
