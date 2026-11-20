@@ -1,0 +1,86 @@
+; hdaudio.inf: installs hdaudio.sys, the WDM audio driver for the audio
+; function group of a High Definition Audio codec, on Windows 98, 98 SE
+; and ME. Install hdaudbus.inf first: hdaudbus.sys finds the function
+; group and Windows then asks for this one. Put both on a disk with the
+; .sys files.
+
+[Version]
+Signature="$CHICAGO$"
+Class=MEDIA
+ClassGUID={4d36e96c-e325-11ce-bfc1-08002be10318}
+Provider=%Provider%
+DriverVer=11/18/2026,1.0.0.0
+
+[SourceDisksNames]
+1=%Disk%,,,
+
+[SourceDisksFiles]
+hdaudio.sys=1
+
+[DestinationDirs]
+DefaultDestDir=10,system32\drivers
+
+[Manufacturer]
+%Provider%=Models
+
+; The audio function group hdaudbus.sys finds on a codec (any vendor's;
+; its device IDs carry VEN, DEV and SUBSYS ahead of this one).
+[Models]
+%HDA.Desc%=HDA,HDAUDIO\FUNC_01
+
+[HDA]
+Include=ks.inf,wdmaudio.inf
+Needs=KS.Registration,WDMAUDIO.Registration
+AddReg=HDA.AddReg
+CopyFiles=HDA.Files
+
+[HDA.Files]
+hdaudio.sys
+
+[HDA.AddReg]
+HKR,,DevLoader,,*ntkern
+HKR,,NTMPDriver,,hdaudio.sys
+HKR,,Driver,,hdaudio.sys
+HKR,,AssociatedFilters,,"wdmaud,swmidi,redbook"
+HKR,Drivers,SubClasses,,"wave,midi,mixer"
+HKR,Drivers\wave\wdmaud.drv,Driver,,wdmaud.drv
+HKR,Drivers\midi\wdmaud.drv,Driver,,wdmaud.drv
+HKR,Drivers\mixer\wdmaud.drv,Driver,,wdmaud.drv
+HKR,Drivers\wave\wdmaud.drv,Description,,%HDA.Desc%
+HKR,Drivers\midi\wdmaud.drv,Description,,%MIDI.Desc%
+HKR,Drivers\mixer\wdmaud.drv,Description,,%HDA.Desc%
+
+; The subdevices hdaudio.sys registers (PcRegisterSubdevice), by name.
+[HDA.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,HDA.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,HDA.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,HDA.Topology
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_Topology%,HDA.Topology
+
+[HDA.Wave]
+AddReg=HDA.Wave.AddReg
+
+[HDA.Wave.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%HDA.Wave%
+
+[HDA.Topology]
+AddReg=HDA.Topology.AddReg
+
+[HDA.Topology.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%HDA.Topology%
+
+[Strings]
+Provider="clang-retro"
+Disk="hdaudio driver disk"
+HDA.Desc="High Definition Audio (WDM)"
+HDA.Wave="High Definition Audio Wave"
+HDA.Topology="High Definition Audio Mixer"
+MIDI.Desc="High Definition Audio MIDI (software)"
+KSCATEGORY_AUDIO="{6994AD04-93EF-11D0-A3CC-00A0C9223196}"
+KSCATEGORY_RENDER="{65E8773E-8F56-11D0-A3B9-00A0C9223196}"
+KSCATEGORY_TOPOLOGY="{DDA54A40-1E4C-11D1-A050-405705C10000}"
+Proxy.CLSID="{17CCA71B-ECD7-11D0-B908-00A0C9223196}"
+KSNAME_Wave="Wave"
+KSNAME_Topology="Topology"

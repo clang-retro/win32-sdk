@@ -32,6 +32,7 @@ tools/msvcrt-versions.txt        which msvcrt.dll has each function
 tools/gen-msvcrt-versions.py     makes msvcrt-versions.txt
 tests/                           the tests, run in Wine
 tests/ddk/                       the test driver and its tests
+drivers/hdaudio/                 HD Audio drivers for 98, 98 SE and ME
 ```
 
 ## The package's sysroots
@@ -620,6 +621,14 @@ adapter driver that makes a topology port when its device starts, in C.
 `scripts/fix-ddk-headers.sh` makes `ksmedia.h` (which `<portcls.h>`
 includes) compile in kernel mode, where nothing defines the `TCHAR` of
 its `TRANSPORTBASICPARMS`.
+
+[`drivers/hdaudio`](drivers/hdaudio/README.md) is a whole one: HD Audio
+for 98, 98 SE and ME, split as XP splits it. A bus driver drives Intel's
+HDA controllers (and QEMU's) and gives each codec function group its own
+device and XP's HD Audio bus interface (`<hdaudio.h>`); an audio driver
+with WaveCyclic and topology miniports in C takes the audio function
+group, and a soft modem's driver can take the modem one. Its hardware code
+is tested in QEMU without Windows.
 
 USB drivers import USBD.SYS. Link them with `-lusbd9x`, which
 `build-vxd.sh` makes from `tools/usbd9x-exports.txt`, not mingw-w64's

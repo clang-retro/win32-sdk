@@ -13,9 +13,10 @@
 # display.c is built as an NT display driver with a DirectDraw and
 # Direct3D HAL (win32k.sys, check-imports.py --nt); hello.c is built with
 # a PDB for WinDbg (llvm-symbolizer reads it); hdafunc.c is an HD Audio
-# function driver for XP and later; vidmini.c is a video miniport with
-# kernel-mode DirectDraw; and miniport.c is
-# built as a SCSI miniport for Windows 9x (check-imports.py --miniport).
+# function driver for XP and later; drivers/hdaudio's bus, audio and
+# sample modem drivers are for 98, 98 SE and ME; vidmini.c is a video
+# miniport with kernel-mode DirectDraw; and miniport.c is built as a SCSI
+# miniport for Windows 9x (check-imports.py --miniport).
 #
 #   CFGDIR   folder with clang and the config files (a toolchain package's
 #            bin/), with the win32-sdk sysroots next to it in ../sysroots
@@ -183,6 +184,37 @@ if [ -f "$CFGDIR/nt4-ddk.cfg" ]; then
   else
     pass=$((pass + 1))
   fi
+fi
+# drivers/hdaudio for 98, 98 SE and ME, at each level: hdaudbus.sys, the
+# HD Audio bus driver, hdaudio.sys, the audio function driver (port
+# class) on its bus interface, and modem/hdamodem.sys, the sample modem
+# function driver, each checked to import only what their WDM and port
+# class have. drivers/hdaudio/test/run-tests.sh tests the
+# hardware code in QEMU.
+hda=$here/../../drivers/hdaudio
+if [ -f "$CFGDIR/nt4-ddk.cfg" ] && [ -f "$hda/hdaudbus.c" ]; then
+  for opt in O0 O2 Os; do
+    for drv in hdaudbus hdaudio hdamodem; do
+      t=$drv-$opt
+      if [ $drv = hdaudbus ]; then
+        src="$hda/hda.c $hda/codec.c $hda/hdaudbus.c"; libs=
+      elif [ $drv = hdamodem ]; then
+        src=$hda/modem/hdamodem.c; libs=
+      else
+        src="$hda/codec.c $hda/hdaudio.c"; libs="-lportcls -lksguid"
+      fi
+      # shellcheck disable=SC2086
+      if ! "$CFGDIR/clang" --config="$CFGDIR/nt4-ddk.cfg" -march=i486 \
+           -$opt -Wall -Wextra -Werror $src $libs -o $t.sys >$t.log 2>&1
+      then
+        bad "$t build" $t.log; continue
+      fi
+      for v in 98 98se me; do
+        if ${PYTHON:-python3} "$check" --wdm $v $t.sys >$t-$v.chk 2>&1
+        then pass=$((pass + 1)); else bad "$t wdm $v" $t-$v.chk; fi
+      done
+    done
+  done
 fi
 # WDM drivers for 98, 98 SE and ME: usbdrv.c with -lusbd9x (and with
 # mingw-w64's -lusbd, which 98 SE's USBD.SYS cannot load); hidparse.c,
