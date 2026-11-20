@@ -33,6 +33,17 @@ MODULES = {
     "scsiport.lib": "scsiport.sys",
     "videoprt.lib": "videoprt.sys",
     "tdi.lib": "tdi.sys",
+    # Display and printer drivers' (GDI's engine, Windows NT 4.0 and later).
+    "win32k.lib": "win32k.sys",
+    # The class drivers WDM drivers link (Windows 2000 and later).
+    "stream.lib": "stream.sys",
+    "ks.lib": "ks.sys",
+    "portcls.lib": "portcls.sys",
+    "usbd.lib": "usbd.sys",
+    "hidclass.lib": "hidclass.sys",
+    "hidparse.lib": "hidparse.sys",
+    "battc.lib": "battc.sys",
+    "1394bus.lib": "1394bus.sys",
 }
 
 

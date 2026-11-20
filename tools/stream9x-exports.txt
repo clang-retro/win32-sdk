@@ -1,0 +1,27 @@
+# The STREAM.SYS functions a stream class minidriver (video capture, USB
+# cameras with USBCAMD.SYS, TV tuners) can import on Windows 98, 98 SE
+# and ME, decorated: the 98 DDK's stream.lib has them, and ME's
+# STREAM.SYS adds StreamClassFilterReenumerateStreams. mingw-w64 has
+# <strmini.h> but no import library; build-vxd.sh makes libstream.a
+# from this. check-imports.py --wdm checks which version has each
+# (wdm9x-exports.txt).
+StreamClassAbortOutstandingRequests@12
+StreamClassCallAtNewPriority@20
+StreamClassCompleteRequestAndMarkQueueReady@4
+StreamClassDebugAssert@16
+StreamClassDebugPrint
+StreamClassDeviceNotification
+StreamClassFilterReenumerateStreams@8
+StreamClassGetDmaBuffer@4
+StreamClassGetNextEvent@20
+StreamClassGetPhysicalAddress@20
+StreamClassLogError@16
+StreamClassPnPAddDeviceWorker@12
+StreamClassQueryMasterClock@16
+StreamClassQueryMasterClockSync@8
+StreamClassReadWriteConfig@20
+StreamClassReenumerateStreams@8
+StreamClassRegisterAdapter@12
+StreamClassRegisterFilterWithNoKSPins@24
+StreamClassScheduleTimer@20
+StreamClassStreamNotification

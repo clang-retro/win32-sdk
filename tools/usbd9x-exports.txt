@@ -1,0 +1,39 @@
+# The USBD.SYS functions a WDM USB driver can import on Windows 98,
+# 98 SE and ME, decorated. build-vxd.sh makes libusbd9x.a from it, the
+# import library as the 98 DDK's usbd.lib has it: 98's and 98 SE's
+# USBD.SYS export the three stdcall functions below that take a variable
+# part only by their decorated names (_Name@n), and so the library
+# imports them by those, which ME and Windows 2000 and later export too.
+# mingw-w64's libusbd.a imports them undecorated, which only ME has.
+# check-imports.py --wdm checks which version has each
+# (wdm9x-exports.txt).
+USBD_AllocateDeviceName@4
+USBD_CalculateUsbBandwidth@12
+USBD_CompleteRequest@8
+USBD_CreateConfigurationRequest@8
+USBD_CreateConfigurationRequestEx@8 == _USBD_CreateConfigurationRequestEx@8
+USBD_CreateDevice@20
+USBD_Debug_GetHeap@16
+USBD_Debug_LogEntry@16
+USBD_Debug_RetHeap@12
+USBD_Dispatch@16
+USBD_FreeDeviceMutex@4
+USBD_FreeDeviceName@4
+USBD_GetDeviceInformation@12
+USBD_GetInterfaceLength@8
+USBD_GetPdoRegistryParameter@20
+USBD_GetSuspendPowerState@4
+USBD_GetUSBDIVersion@4
+USBD_InitializeDevice@24
+USBD_MakePdoName@8
+USBD_ParseConfigurationDescriptor@12
+USBD_ParseConfigurationDescriptorEx@28 == _USBD_ParseConfigurationDescriptorEx@28
+USBD_ParseDescriptors@16 == _USBD_ParseDescriptors@16
+USBD_QueryBusTime@8
+USBD_RegisterHcDeviceCapabilities@12
+USBD_RegisterHcFilter@8
+USBD_RegisterHostController@40
+USBD_RemoveDevice@12
+USBD_RestoreDevice@12
+USBD_SetSuspendPowerState@8
+USBD_WaitDeviceMutex@4
