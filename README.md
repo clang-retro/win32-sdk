@@ -1240,8 +1240,9 @@ folder instead), and every kit found there is imported. Each one becomes
   rejects, so `ms-ws03` and `ms-ws03-x64` include `ms-intrin-shim.h`
   first. The DDK's `inc/w2k` and `inc/wxp` lack four headers `windows.h`
   includes, which come from `inc/wnet`.
-* C only: the kits' C++ libraries are for Microsoft's compilers of the
-  time.
+* The kits above are for C. For C++ that links with code from Visual C++
+  (its `.lib` and DLL files, `msvcp60.dll`, MFC 4.2), use the C++ kits
+  below.
 * The `-ddk` kits build kernel-mode drivers (`clang --config=ms-xp-ddk.cfg
   -O2 mydriver.c -o mydriver.sys`), with the DDK's `ntddk.h`, `wdm.h` and
   the rest before its Windows headers, and its `ntoskrnl.lib`, `hal.lib`
@@ -1316,6 +1317,26 @@ import by ordinal #0, so `ms_oldlib.py` makes them plain undecorated
 imports, which mean the same thing to every linker. `kits-test.py`
 checks each driver's imports with `check-imports.py`, which catches
 that.
+
+### C++ with the Visual C++ ABI
+
+The C++ kits build C++ programs and DLLs that link with code from Visual
+C++ 4.0 to .NET 2003. They use the Microsoft C++ ABI of that compiler and
+its runtime DLLs (`msvcrt.dll`, `msvcp60.dll`, `mfc42.dll`, ...):
+
+```sh
+python3 tools/import-ms-sdk.py --sdks /path/to/WindowsSDKs ~/clang-dos xp-vc6
+clang++ --config=ms-xp-vc6.cfg -O2 app.cpp vendor.lib -o app.exe
+```
+
+| Kit | Folder | ABI of |
+| --- | --- | --- |
+| `w2k-vc6`, `xp-vc6`, `ws03-vc6` | `5.2.3970.1830 DDK (unpacked)` | Visual C++ 6.0 (tested) |
+| `vc40`, `vc42`, `vc50`, `vc60`, `vc71` | `Visual C++ 4.0` ... `Visual C++ .NET 2003` | each version (4.2 to 2003 tested; 4.0 not tested) |
+
+`tests/msvc-abi/run-test.sh` tests them in Wine against the DDK's own
+`cl.exe`. See [docs/msvc-cxx.md](docs/msvc-cxx.md) for the kits, the ABI
+of each Visual C++, the header fixes, the tests and the limits.
 
 ## License
 

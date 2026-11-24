@@ -32,6 +32,7 @@ nav:
   - "Kernel-mode drivers": drivers.md
   - "Checks and tests": checks.md
   - "Microsoft's SDKs and DDKs": ms-sdks.md
+  - "C++ with the Visual C++ ABI": msvc-cxx.md
   - "Redistributing": redistributing.md
   - "Contributing": contributing.md
   - "License": license.md
