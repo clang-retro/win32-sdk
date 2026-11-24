@@ -6,13 +6,15 @@
 
 #include <stdio.h>
 #include <string.h>
+#ifdef ABI_HAS_STD
 #include <stdexcept>
+#endif
 #include <typeinfo>
 
 static int failures = 0;
 
 /* Prints a check and counts it if it failed. */
-static void check(const char *what, bool ok) {
+static void check(const char *what, abi_bool ok) {
   printf("%s %s\n", ok ? "ok  " : "FAIL", what);
   if (!ok)
     failures++;
@@ -62,7 +64,7 @@ int main() {
   check_int("mangle: integer and floating types",
             abi_mangle((signed char)-1, (unsigned char)2, (short)-3,
                        (unsigned short)4, -5L, 6UL, (__int64)7,
-                       (unsigned __int64)8, 1.5f, 2.5, true),
+                       (unsigned __int64)8, 1.5f, 2.5, 1),
             23);
   char buf[] = "abcd";
   int k = 5, l = 6;
@@ -83,11 +85,11 @@ int main() {
   check_int("non-inline virtual", r.area(), 168);
   Named *n = &r;
   check("second base's virtual", strcmp(n->label(), "rect") == 0);
-  check_int("member function pointer", abi_call_getter(r, abi_getter(false)),
+  check_int("member function pointer", abi_call_getter(r, abi_getter(0)),
             14);
   RectGetter g = &Rect::width;
   check_int("member function pointer, other way", abi_call_getter(r, g), 12);
-  check_int("data member pointer", r.*abi_field(false), 14);
+  check_int("data member pointer", r.*abi_field(0), 14);
 
   Square sq(9);
   check_int("library calls our virtual", abi_catch_area(&sq), 81);
@@ -171,6 +173,7 @@ int main() {
   }
   check_int("rethrow", got, 6);
 
+#ifdef ABI_HAS_STD
   // The C++ library.
   std::vector<std::string> parts;
   parts.push_back("one");
@@ -194,6 +197,7 @@ int main() {
     got = 2;
   }
   check_int("std::out_of_range from the C++ library", got, 1);
+#endif
 
   printf("%d failed\n", failures);
   return failures;

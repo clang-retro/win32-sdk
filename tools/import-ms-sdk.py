@@ -44,7 +44,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # wins, so the C runtime headers usually come before the Windows ones),
 # the _MSC_VER of the compiler it came with and extra predefined macros.
 # "old" marks the kits from before 1997, whose libraries need ms_oldlib's
-# fixes, "gs" the ones whose C runtime is built with /GS (the security
+# fixes ("old-libs" asks for these fixes only: Visual C++ 5.0), "gs" the ones whose C runtime is built with /GS (the security
 # cookie is in bufferoverflowu.lib), "intrin-shim" the ones whose winnt.h
 # declares intrinsics differently from clang (see ms-intrin-shim.h).
 KITS = {
@@ -201,6 +201,8 @@ KITS = {
         "msc": "11.00",
         "include": ["VC/INCLUDE", "VC/MFC/INCLUDE", "VC/ATL/INCLUDE"],
         "lib": ["VC/LIB", "VC/MFC/LIB"],
+        "old-libs": True,
+        "no-safeseh": True,
         "cxx": "5.0",
     },
     "vc60": {
@@ -210,6 +212,7 @@ KITS = {
         "msc": "12.00",
         "include": ["VC98/INCLUDE", "VC98/MFC/INCLUDE", "VC98/ATL/INCLUDE"],
         "lib": ["VC98/LIB", "VC98/MFC/LIB"],
+        "no-safeseh": True,
         "cxx": "6.0",
     },
     "vc71": {
@@ -504,7 +507,12 @@ def cxx_flags(kit):
         # library has no operator new[], these names take operator new.
         "-Wl,-alternatename:??_U@YAPAXI@Z=??2@YAPAXI@Z",
         "-Wl,-alternatename:??_V@YAXPAX@Z=??3@YAXPAX@Z",
-    ] if float(kit["msc"]) < 13 else [])
+    ] if float(kit["msc"]) < 13 else []) + ([
+        # The libraries of Visual C++ 6.0 and before have no SafeSEH tables:
+        # /SAFESEH came with Visual C++ .NET 2003 (13.10). The kits of
+        # Visual C++ 5.0 and 6.0 say "no-safeseh" ("old" kits have it too).
+        "-Wl,-safeseh:no",
+    ] if kit.get("no-safeseh") else [])
 
 
 def write_cfg(path, kit, sysname, triple, msc, defines, crtlibs, vfs, extra,
@@ -608,6 +616,8 @@ def import_kit(name, kitdirs, package, llvm_lib):
     includes = lower_tree(incdirs, os.path.join(sysroot, "include"), "include")
     for n in fix_headers(name, os.path.join(sysroot, "include")):
         print("%s: %s" % (name, n))
+    if fix_stdarg(os.path.join(sysroot, "include")):
+        print("%s: stdarg.h uses clang's va_start" % name)
     if kit.get("cxx"):
         for n in fix_cxx_headers(os.path.join(sysroot, "include")):
             print("%s: %s" % (name, n))
@@ -634,11 +644,12 @@ def import_kit(name, kitdirs, package, llvm_lib):
         if need not in libs:
             print("%s: warning: no %s" % (name, need), file=sys.stderr)
     extra = []
-    if kit.get("old"):
+    if kit.get("old") or kit.get("old-libs"):
         libdir = os.path.join(sysroot, "lib")
         notes = fix_old_libs(libdir, libs, llvm_lib)
         for n in notes:
             print("%s: %s" % (name, n))
+    if kit.get("old"):
         # The 1993 C runtime predates __int64: take the helpers clang calls
         # for 64-bit division and the like from a newer kit, if there is one.
         ll64 = make_ll64(kitdirs, libdir, llvm_lib)
@@ -942,6 +953,39 @@ HEADER_FIXES = {
 }
 
 
+# The end of stdarg.h. Microsoft's va_start takes the address of the last
+# named parameter. That is wrong when clang inlines a variadic function, for
+# example CString::Format of MFC 7.1. clang does not inline a function that
+# uses its builtins.
+STDARG_BUILTINS = """
+/* clang-dos: clang's va_start, va_arg and va_end (import-ms-sdk.py). */
+#if defined(__clang__) && defined(_M_IX86)
+#undef va_start
+#undef va_arg
+#undef va_end
+#define va_start(ap, v) __builtin_va_start(ap, v)
+#define va_arg(ap, t) __builtin_va_arg(ap, t)
+#define va_end(ap) __builtin_va_end(ap)
+#endif
+"""
+
+
+def fix_stdarg(incdir):
+    """Add STDARG_BUILTINS to the end of stdarg.h in incdir. Returns True if
+    it changed the file."""
+    p = os.path.join(incdir, "stdarg.h")
+    if not os.path.exists(p):
+        return False
+    with open(p, "rb") as f:
+        data = f.read()
+    end = STDARG_BUILTINS
+    if b"\r\n" in data:
+        end = end.replace("\n", "\r\n")
+    with open(p, "wb") as f:
+        f.write(data + end.encode("latin-1"))
+    return True
+
+
 def fix_headers(name, incdir):
     notes = []
     if not KITS[name].get("kernel"):
@@ -993,6 +1037,47 @@ CXX_HEADER_FIXES = {
         (r"typename const (\w+)::", r"const typename \1::"),
         (r"(?<!typename )\b(_Bfn::\w+_argument_type)\(", r"typename \1("),
     ],
+    # "class _CRTIMP _Complex_base<float>;" after the template asks for the
+    # DLL's instantiation (Visual C++ 5.0). clang takes it for an explicit
+    # specialization that has no definition. The copies drop these lines
+    # (Visual C++ 6.0 has none).
+    "complex": [
+        (r"\nclass _CRTIMP _Complex_base<[\w ]+>;(?=\r?\n)", ""),
+    ],
+    # In vector<bool>, const_iterator takes an iterator of the vector. There,
+    # "iterator" names the std::iterator base of const_iterator. Visual C++
+    # 6.0 and before took the vector's class (Visual C++ 4.2 to 6.0).
+    "vector": [
+        (r"const_iterator\(const iterator& _X\)",
+         "const_iterator(const vector::iterator& _X)"),
+    ],
+    # npos takes a dependent type without "typename" (Visual C++ .NET
+    # 2003). The error stops the explicit instantiations of basic_string.
+    "xstring": [
+        (r"\(basic_string<_Elem, _Traits, _Alloc>::size_type\)\(-1\)",
+         "(typename basic_string<_Elem, _Traits, _Alloc>::size_type)(-1)"),
+    ],
+    # The const members of CPtrList and CObList return a "const void*&"
+    # or "const CObject*&" that refers to a "void*" or "CObject*" (MFC 7.1).
+    # Visual C++ binds the reference; the copies cast the value.
+    "afxcoll.inl": [("const-pointer-refs", None)],
+    # Visual C++ 4.2 had no bool: its yvals.h makes one of int, and true
+    # and false. In C++, clang has these keywords. The copies keep them for C.
+    "yvals.h": [
+        (r"(typedef int bool;\s*#if !defined\(false\)\s*#define false\s+0\s*"
+         r"#endif\s*#if !defined\(true\)\s*#define true\s+1\s*#endif)",
+         r"#ifndef __cplusplus\n\1\n#endif"),
+    ],
+    # type_info is not in std (Visual C++ 4.2). clang's typeid looks for
+    # std::type_info.
+    "typeinfo": [
+        (r"(?s)\A(?!.*using ::type_info)(.*)(\r?\n)#endif // _INC_TYPEINFO",
+         r"\1\2namespace std { using ::type_info; }\2#endif // _INC_TYPEINFO"),
+    ],
+    # The CTypedPtrList specializations for CObList and CPtrList use TYPE
+    # and BASE_CLASS, the parameters of the primary template (MFC of Visual
+    # C++ 4.2 to 6.0).
+    "afxtempl.h": [("specialization-names", None)],
     # Two operators that MFC 4.2 declares with an implicit int.
     "afxwin1.inl": [
         (r"_AFXWIN_INLINE CMenu::operator(==|!=)",
@@ -1010,6 +1095,103 @@ def fix_openmode_defaults(text):
     return re.sub(r"(openmode\s+\w+\s*=)([^,)]*)", qualify, text)
 
 
+def fix_specialization_names(text):
+    """In each explicit specialization "template<> class CTypedPtrList<B, T>",
+    replace TYPE with T and BASE_CLASS with B. Visual C++ 6.0 and before
+    found the names of the primary template's parameters there."""
+    spec = re.compile(r"(?:template\s*<\s*>\s*)?class\s+CTypedPtrList\s*"
+                      r"<\s*(\w+)\s*,\s*(\w+\s*\*)\s*>(.*?)\n\};",
+                      re.S)
+
+    def one(m):
+        """The specialization m with the names replaced."""
+        body = re.sub(r"\bTYPE\b", m.group(2), m.group(3))
+        body = re.sub(r"\bBASE_CLASS\b", m.group(1), body)
+        return m.group(0).replace(m.group(3), body)
+    return spec.sub(one, text)
+
+
+def fix_const_pointer_refs(text):
+    """In each inline function that returns "const T*&" and is const, cast
+    the value of each return statement to "const T*&"."""
+    fn = re.compile(r"(_AFXCOLL_INLINE const (\w+)\s*\*\s*&[^\n]*\)\s*const"
+                    r"[^\n]*\n)(.*?\})", re.S)
+
+    def one(m):
+        """The function m with its return values cast."""
+        body = re.sub(r"return\s+(?!\(const)([^;]+);",
+                      r"return (const %s*&)(\1);" % m.group(2), m.group(3))
+        return m.group(1) + body
+    return fn.sub(one, text)
+
+
+# Where the C++ library of Visual C++ 5.0 defines the templates that its
+# iosfwd names in "extern template" statements: the class templates by name,
+# the function templates by the comment above them in iosfwd.
+EXTERN_TEMPLATE_HOMES = {
+    "basic_ios": "ios", "basic_streambuf": "streambuf",
+    "basic_istream": "istream", "basic_iostream": "istream",
+    "basic_ostream": "ostream",
+    "basic_stringbuf": "sstream", "basic_istringstream": "sstream",
+    "basic_ostringstream": "sstream", "basic_stringstream": "sstream",
+    "basic_filebuf": "fstream", "basic_ifstream": "fstream",
+    "basic_ofstream": "fstream", "basic_fstream": "fstream",
+    "num_get": "xlocnum", "num_put": "xlocnum", "collate": "locale",
+    # The comments.
+    "istream": "istream", "ostream": "ostream", "string": "string",
+    "complex": "complex", "xcomplex": "complex",
+}
+
+
+def move_extern_templates(incdir):
+    """Move the "extern template" statements of iosfwd to the ends of the
+    headers that define their templates. The iosfwd of Visual C++ 5.0 names
+    the instantiations that msvcp50.dll exports before the templates have a
+    definition, and names function templates that are not declared yet.
+    cl took these as hints. clang needs the definition first. Returns True
+    if it moved statements."""
+    p = os.path.join(incdir, "iosfwd")
+    if not os.path.exists(p):
+        return False
+    with open(p, "rb") as f:
+        text = f.read().decode("latin-1")
+    stmt = re.compile(r"^extern template\b[^;]*;[ \t]*\r?\n",
+                      re.M)
+    section = re.compile(r"^//\s+(\w+)\s*$", re.M)
+    moved = {}
+    for m in stmt.finditer(text):
+        cls = re.match(r"extern template class _CRTIMP\s+(\w+)\s*<[^;&(]*;",
+                       m.group(0))
+        if cls:
+            key = cls.group(1)
+        else:
+            secs = [s.group(1) for s in section.finditer(text, 0, m.start())]
+            key = secs[-1] if secs else ""
+        home = EXTERN_TEMPLATE_HOMES.get(key)
+        if not home:
+            print("warning: no home for %r in iosfwd" % m.group(0)[:60],
+                  file=sys.stderr)
+            continue
+        moved.setdefault(home, []).append(m)
+    if not moved:
+        return False
+    drop = {m.start() for ms in moved.values() for m in ms}
+    text = stmt.sub(lambda m: "" if m.start() in drop else m.group(0), text)
+    with open(p, "wb") as f:
+        f.write(text.encode("latin-1"))
+    for home, ms in moved.items():
+        guard = "_CLANG_DOS_EXTERN_" + home.upper()
+        end = ("\n/* clang-dos: these come from iosfwd (import-ms-sdk.py). */\n"
+               "#if defined(_DLL) && !defined(CRTDLL2) && !defined(%s)\n"
+               "#define %s\n_STD_BEGIN\n" % (guard, guard) +
+               "".join(m.group(0).replace("\r\n", "\n") for m in ms) +
+               "_STD_END\n#endif\n")
+        hp = os.path.join(incdir, home)
+        with open(hp, "ab") as f:
+            f.write(end.encode("latin-1"))
+    return True
+
+
 def fix_cxx_headers(incdir):
     """Apply CXX_HEADER_FIXES to the C++ library and MFC headers in incdir.
     Returns notes for the user."""
@@ -1025,12 +1207,18 @@ def fix_cxx_headers(incdir):
         for pat, rep in fixes:
             if pat == "openmode-defaults":
                 text = fix_openmode_defaults(text)
+            elif pat == "const-pointer-refs":
+                text = fix_const_pointer_refs(text)
+            elif pat == "specialization-names":
+                text = fix_specialization_names(text)
             else:
                 text = re.sub(pat, rep, text)
         if text != old:
             with open(p, "wb") as f:
                 f.write(text.encode("latin-1"))
             notes.append("fixed %s for clang" % hdr)
+    if move_extern_templates(incdir):
+        notes.append("moved the extern templates of iosfwd")
     return notes
 
 
@@ -1135,7 +1323,7 @@ def main():
     names = a.kits or [k for k in KITS if k in kitdirs and complete(k, kitdirs)]
     llvm_lib = a.llvm_lib or os.path.join(
         a.package, "bin", "llvm-lib" + (".exe" if os.name == "nt" else ""))
-    if any(KITS[k].get("old") for k in names) and not os.path.exists(llvm_lib):
+    if any(KITS[k].get("old") or KITS[k].get("old-libs") for k in names) and not os.path.exists(llvm_lib):
         ap.error("no %s: give --llvm-lib" % llvm_lib)
     if not names:
         ap.error("no kits found: give --sdks or --kit-dir")

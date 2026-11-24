@@ -1314,7 +1314,7 @@ clang++ --config=ms-xp-vc6.cfg -O2 app.cpp vendor.lib -o app.exe
 | Kit | Folder | ABI of |
 | --- | --- | --- |
 | `w2k-vc6`, `xp-vc6`, `ws03-vc6` | `5.2.3970.1830 DDK (unpacked)` | Visual C++ 6.0 (tested) |
-| `vc40`, `vc42`, `vc50`, `vc60`, `vc71` | `Visual C++ 4.0` ... `Visual C++ .NET 2003` | each version (not tested yet) |
+| `vc40`, `vc42`, `vc50`, `vc60`, `vc71` | `Visual C++ 4.0` ... `Visual C++ .NET 2003` | each version (4.2 to 2003 tested; 4.0 not tested) |
 
 `tests/msvc-abi/run-test.sh` tests them in Wine against the DDK's own
 `cl.exe`. See [docs/msvc-cxx.md](docs/msvc-cxx.md) for the kits, the ABI

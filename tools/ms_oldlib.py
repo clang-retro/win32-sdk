@@ -115,8 +115,8 @@ def cstr(b, o=0):
 
 
 def parse_obj(m):
-    """(machine, [(section name, data)], [(symbol, section, class)]) of a
-    COFF object, or None for a short import member."""
+    """(machine, [(section name, data)], [(symbol, section, class, value)])
+    of a COFF object, or None for a short import member."""
     mach, nsec, _, psym, nsym, opt, _ = struct.unpack_from("<HHIIIHH", m, 0)
     if mach == 0 and nsec == 0xFFFF:
         return None
@@ -138,8 +138,9 @@ def parse_obj(m):
     i = 0
     while i < nsym:
         raw = m[psym + 18 * i:psym + 18 * i + 8]
-        _, sec, _, cls, aux = struct.unpack_from("<IhHBB", m, psym + 18 * i + 8)
-        syms.append((name(raw), sec, cls))
+        val, sec, _, cls, aux = struct.unpack_from("<IhHBB", m,
+                                                   psym + 18 * i + 8)
+        syms.append((name(raw), sec, cls, val))
         i += 1 + aux
     return mach, secs, syms
 
@@ -161,12 +162,21 @@ def analyse_import_lib(d):
         machine = machine or mach
         sn = [s for s, _ in secs]
         core = [x for x in sn if not x.startswith(".debug")]
-        defined = [(s, sec) for s, sec, cls in syms if sec > 0 and cls == 2]
-        undef = [s for s, sec, cls in syms if sec == 0 and cls == 2]
+        defined = [(s, sec) for s, sec, cls, _ in syms if sec > 0 and cls == 2]
+        undef = [s for s, sec, cls, val in syms
+                 if sec == 0 and val == 0 and cls == 2]
+        # Absolute symbols (section -1) and common ones (section 0 with a
+        # size), such as __except_list and __adjust_fdiv in the msvcrt.lib of
+        # Visual C++ 4.2 and 5.0. An object that has only these is kept.
+        absolute = [s for s, sec, cls, val in syms
+                    if cls == 2 and (sec == -1 or (sec == 0 and val))]
         if ".idata$2" in sn:
             dll = cstr(secs[sn.index(".idata$6")][1]) if ".idata$6" in sn else None
             key = [s for s, _ in defined if "IMPORT_DESCRIPTOR" in s]
             descs[key[0] if key else "#"] = dll
+            continue
+        if absolute and not any(x.startswith(".idata$") for x in core):
+            keep.append(m)
             continue
         if set(core) <= {".idata$3"} or (
                 set(core) <= {".idata$4", ".idata$5"} and
@@ -191,7 +201,11 @@ def analyse_import_lib(d):
             continue
         th = [s for s, sec in defined if secs[sec - 1][0].startswith(".text")]
         ri = [s for s in undef if s.startswith("__imp_")]
-        if th and len(ri) == 1 and core and all(x.startswith(".text") for x in core):
+        # A thunk jumps to the import of its own name. The default DllMain
+        # of msvcrt.lib (Visual C++ 5.0) calls one import too, of another
+        # name.
+        if th and len(ri) == 1 and core and all(x.startswith(".text") for x in core) \
+                and all(ri[0] == "__imp_" + t for t in th):
             for t in th:
                 thunks[t] = ri[0]
             continue

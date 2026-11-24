@@ -5,7 +5,9 @@
 #include "abi.h"
 
 #include <string.h>
+#ifdef ABI_HAS_STD
 #include <stdexcept>
+#endif
 #include <typeinfo>
 
 /* Makes an exception with a code and a message. */
@@ -76,8 +78,9 @@ int VDiamond::sum() const { return vb + vl + vr + vd; }
 /* Adds all arguments, as integers. */
 int abi_mangle(signed char a, unsigned char b, short c, unsigned short d,
                long e, unsigned long f, __int64 g, unsigned __int64 h,
-               float i, double j, bool k) {
-  return (int)(a + b + c + d + e + f + g + h + i + j + k);
+               float i, double j, abi_bool k) {
+  // Visual C++ 6.0 and before cannot convert an unsigned __int64 to double.
+  return (int)(a + b + c + d + e + f + g + (__int64)h + i + j + k);
 }
 
 /* Adds the lengths and the integers. */
@@ -103,7 +106,7 @@ int abi_pair(AbiPair<int> p, AbiPair<double> *q) {
 int abi_color(AbiColor c) { return (int)c * 2 + (int)sizeof(c); }
 
 /* Returns a pointer to Rect::width or Rect::height. */
-RectGetter abi_getter(bool width) {
+RectGetter abi_getter(abi_bool width) {
   return width ? &Rect::width : &Rect::height;
 }
 
@@ -111,7 +114,7 @@ RectGetter abi_getter(bool width) {
 int abi_call_getter(const Rect &r, RectGetter g) { return (r.*g)(); }
 
 /* Returns a pointer to Rect::w_ or Rect::h_. */
-int Rect::*abi_field(bool width) { return width ? &Rect::w_ : &Rect::h_; }
+int Rect::*abi_field(abi_bool width) { return width ? &Rect::w_ : &Rect::h_; }
 
 /* Throws an AbiError, or an AbiRangeError when code is negative. */
 void abi_throw(int code) {
@@ -184,6 +187,7 @@ Rect *abi_new_rects(int n) {
 /* Deletes an array that the other side made. */
 void abi_delete_rects(Rect *r) { delete[] r; }
 
+#ifdef ABI_HAS_STD
 /* Joins the strings with a separator. */
 std::string abi_join(const std::vector<std::string> &parts,
                      const std::string &sep) {
@@ -209,3 +213,4 @@ std::wstring abi_wide(const wchar_t *s) { return std::wstring(L"w:") + s; }
 
 /* Returns s.at(i), which throws std::out_of_range past the end. */
 char abi_string_at(const std::string &s, int i) { return s.at(i); }
+#endif

@@ -30,7 +30,23 @@ C++ library headers of Visual C++ 6.0, the import libraries of
 
 The `vc*` kits use an installed Visual C++. The folder holds what setup
 installed: `MSDEV` for 4.0 and 4.2, `VC` for 5.0, `VC98` for 6.0, and `Vc7`
-for 2003. These kits are not tested with real copies yet.
+for 2003. The `vc42`, `vc50`, `vc60` and `vc71` kits are tested with real
+copies (see "Tests"). The `vc40` kit is not tested.
+
+`tools/vc-from-cd.py` makes this folder from the CDs. Extract each CD
+image or self-extracting archive into a folder first:
+
+```sh
+python3 tools/vc-from-cd.py vc60 "/path/to/Visual C++ 6.0" /path/to/cd1
+python3 tools/vc-from-cd.py vc71 "/path/to/Visual C++ .NET 2003" cd1 cd2
+```
+
+* The Visual C++ 6.0 CD has 8.3 names for the C++ headers (`algrithm`
+  for `algorithm`). The tool gives the long names from `SETUP/VS98*.INF`.
+* The Platform SDK of Visual Studio .NET 2003 is only in the cabinets of
+  `vs_setup.msi`. The tool extracts them with `msiextract` (from
+  msitools). It copies `msvcr71.dll`, `msvcp71.dll` and the MFC 7.1 DLLs
+  to `redist`.
 
 To make the kits:
 
@@ -64,6 +80,11 @@ does. `afx.h` names the MFC libraries to link.
   export their wide-character functions with this type.
 * The config files of the DDK kits link `bufferoverflowu.lib`, because the
   DDK's C runtime library is built with `/GS`.
+* The config files of the `vc50` and `vc60` kits give `-safeseh:no` to the
+  linker. The libraries of these releases have no SafeSEH tables.
+* The import libraries of Visual C++ 5.0 and before are in the long
+  format of LINK 5.0. lld reads them. The importer converts the C runtime
+  libraries of `vc50`, as for the older kits.
 
 ## The ABI of each Visual C++
 
@@ -117,16 +138,52 @@ The importer copies the headers. It changes these copies for clang:
   that clang needs.
 * `afxwin1.inl` (MFC 4.2): two `CMenu` operators have no return type (an
   implicit `int`). The copies say `BOOL`.
+* `stdarg.h` (all kits): Microsoft's `va_start` uses the address of the
+  last parameter. This is not correct when clang inlines a variadic
+  function, for example `CString::Format`. The copies use clang's
+  `__builtin_va_start` and the other `__builtin_va_*` functions.
+* `iosfwd` (Visual C++ 5.0): `extern template` statements come before the
+  templates are defined. The importer moves each statement to the end of
+  the header that defines its template.
+* `complex` (Visual C++ 5.0): the `class _CRTIMP _Complex_base<float>;`
+  lines are removed.
+* `vector` (Visual C++ 5.0 and 6.0): in `vector<bool>`, the
+  `const_iterator` constructor says `vector::iterator`. Visual C++ found
+  the outer `iterator` there.
+* `xstring` (Visual C++ .NET 2003): `npos` gets the `typename` that clang
+  needs.
+* `afxtempl.h` (MFC 4.x): the `CTypedPtrList` specializations get
+  `template<>`, and their real types for `TYPE` and `BASE_CLASS`.
+* `afxcoll.inl` (MFC 7.1): functions that return `const void*&` cast
+  `void*` to this type. Visual C++ accepted it without a cast.
+* `yvals.h` (Visual C++ 4.2): `typedef int bool`, `true` and `false` are
+  only for C. clang has `bool` in C++.
+* `typeinfo` (Visual C++ 4.2): adds `std::type_info` as a name of the
+  global `type_info`.
+
+clang also accepts two things for `-fms-compatibility-version` 12.00 and
+before, with a warning. The C++ headers of Visual C++ 5.0 and 6.0 use
+them: a default template argument in the declaration and again in the
+definition, and an explicit specialization without `template<>`.
 
 ## Tests
 
-`tests/msvc-abi/run-test.sh` tests the ABI in Wine against the DDK's
-`cl.exe`, which runs in Wine:
+`tests/msvc-abi/run-test.sh` tests the ABI in Wine against a real
+`cl.exe`, which runs in Wine. For the DDK kits, this is the DDK's
+`cl.exe`. For the `vc*` kits, give `VCDIR`: the test then uses the
+`cl.exe`, headers and libraries of that Visual C++.
 
 ```sh
 PACKAGE=~/clang-dos DDK="/path/to/5.2.3970.1830 DDK (unpacked)/WINDDK" \
 MFC42_DLL=/path/to/mfc42.dll sh tests/msvc-abi/run-test.sh
+PACKAGE=~/clang-dos KIT=vc60 VCDIR="/path/to/Visual C++ 6.0" \
+MFC42_DLL=/path/to/mfc42.dll sh tests/msvc-abi/run-test.sh
 ```
+
+`RUNTIME` gives more folders (separated by `:`) that hold the runtime
+DLLs of the kit. LINK 5.0 and before cannot read the import libraries
+that lld writes. For `vc40`, `vc42` and `vc50`, the test makes the import
+library of a clang DLL again with the `lib.exe` of the kit.
 
 | Test | Library | Program |
 | --- | --- | --- |
@@ -137,9 +194,20 @@ MFC42_DLL=/path/to/mfc42.dll sh tests/msvc-abi/run-test.sh
 | `stl` | `msvcp60.dll` | `stl.cpp`, built by clang |
 | `mfc` | `mfc42.dll` | `mfc.cpp`, built by clang |
 
-With the three DDK kits, all six tests pass in Wine 9.0, at `-O2` and
-`-O0`: 43 checks in each ABI test, 23 in `stl` and 12 in `mfc`. Set
-`CLANG_FLAGS` to give clang more flags, and `KIT` for another kit.
+Results in Wine 9.0:
+
+| Kit | `cl` | Result |
+| --- | --- | --- |
+| `w2k-vc6`, `xp-vc6`, `ws03-vc6` | DDK, 13.10 | all six tests pass, at `-O2` and `-O0` |
+| `vc42` | 10.20 | `cl-cl`, `clang-cl`, `cl-clang` (39 checks each) and `mfc` pass. No `stl`: 4.2 has no standard C++ library. |
+| `vc50` | 11.00 | all five tests pass |
+| `vc60` | 12.00 | all five tests pass |
+| `vc71` | 13.10 | all five tests pass |
+| `vc40` | none | not tested: no copy was available |
+
+Each ABI test has 43 checks (39 for `vc42`), `stl` has 23 and `mfc` has
+12. The `vc*` kits do not run `clang7-cl`, because they already use the
+version of their `cl`. Set `CLANG_FLAGS` to give clang more flags.
 
 `abi.h` is the interface between the two sides. It has exceptions that
 each side throws and the other catches, by type and by base class;
@@ -163,8 +231,10 @@ that failed.
 * The `-fno-wchar` flag of the config files makes `wchar_t` a typedef.
   Code that overloads a function on `wchar_t` and `unsigned short` does
   not compile, as with `cl /Zc:wchar_t-`.
-* The `vc40` to `vc71` kits are not tested with real copies of Visual
-  C++. Some of their headers can need more fixes for clang.
+* The `vc40` kit is not tested with a real copy of Visual C++ 4.0. Its
+  headers can need more fixes for clang.
+* Visual C++ 4.2 has no standard C++ library (no `std::string` and no
+  `std::vector`), and its `bool` in C is `int`.
 * Only 32-bit x86. The 64-bit DDK kit (`ws03-x64`) is C only.
 
 ## 16-bit Windows (Visual C++ 1.5x)

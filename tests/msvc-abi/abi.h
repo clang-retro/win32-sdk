@@ -6,8 +6,17 @@
 #ifndef ABI_H
 #define ABI_H
 
+/* Visual C++ 5.0 (_MSC_VER 1100) brought bool and the standard C++
+ * library. Before it, bool is an int and the test has no C++ library
+ * checks. */
+#if !defined(_MSC_VER) || _MSC_VER >= 1100
+#define ABI_HAS_STD 1
 #include <string>
 #include <vector>
+typedef bool abi_bool;
+#else
+typedef int abi_bool;
+#endif
 
 #ifdef ABI_BUILD_DLL
 #define ABI_API __declspec(dllexport)
@@ -130,7 +139,7 @@ public:
 /* Names with many kinds of type, to test name mangling. */
 ABI_API int abi_mangle(signed char, unsigned char, short, unsigned short,
                        long, unsigned long, __int64, unsigned __int64,
-                       float, double, bool);
+                       float, double, abi_bool);
 /* A function with pointers, references and const. */
 ABI_API int abi_mangle(const char *, char *const, const int &, int *volatile);
 /* A function that takes a function pointer. */
@@ -155,11 +164,11 @@ ABI_API int abi_color(AbiColor c);
 /* Member pointers across the boundary. */
 typedef int (Rect::*RectGetter)() const;
 /* Returns a pointer to the member function Rect::width or Rect::height. */
-ABI_API RectGetter abi_getter(bool width);
+ABI_API RectGetter abi_getter(abi_bool width);
 /* Calls a member function pointer on a Rect. */
 ABI_API int abi_call_getter(const Rect &r, RectGetter g);
 /* Returns a pointer to the data member Rect::w_ or Rect::h_. */
-ABI_API int Rect::*abi_field(bool width);
+ABI_API int Rect::*abi_field(abi_bool width);
 
 /* Throws an AbiError (or an AbiRangeError when code is negative). */
 ABI_API void abi_throw(int code);
@@ -188,6 +197,7 @@ ABI_API Rect *abi_new_rects(int n);
 /* Deletes an array that the other side made with new[]. */
 ABI_API void abi_delete_rects(Rect *r);
 
+#ifdef ABI_HAS_STD
 /* The C++ library: std::string and std::vector cross the boundary. */
 ABI_API std::string abi_join(const std::vector<std::string> &parts,
                              const std::string &sep);
@@ -197,5 +207,6 @@ ABI_API int abi_sum(const std::vector<int> &v);
 ABI_API std::wstring abi_wide(const wchar_t *s);
 /* Throws a std::out_of_range from msvcp60.dll's std::string::at. */
 ABI_API char abi_string_at(const std::string &s, int i);
+#endif
 
 #endif
