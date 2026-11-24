@@ -120,6 +120,108 @@ KITS = {
         "gs": True,
         "intrin-shim": True,
     },
+    # C++ kits: "cxx" names the Visual C++ whose C++ ABI the config file
+    # pins with -fms-compatibility-version, so that names, class layout,
+    # RTTI and exception tables match what that compiler made. They link the
+    # C runtime DLL (msvcrt.lib) and, with the C++ library headers, its C++
+    # library DLL (msvcprt.lib), as cl /MD does. The DDK ones are Visual
+    # C++ 6.0's ABI: their msvcp60.dll and mfc42.dll come from it.
+    "w2k-vc6": {
+        "name": "Windows 2000 from the Windows Server 2003 SP1 DDK (3790.1830), "
+                "C++ with the Visual C++ 6.0 ABI, msvcrt.dll, msvcp60.dll and "
+                "mfc42.dll",
+        "folder": "5.2.3970.1830 DDK (unpacked)",
+        "triple": "i586-pc-windows5.0-msvc",
+        "msc": "12.00",
+        "include": ["WINDDK/inc/crt", "WINDDK/inc/w2k", "WINDDK/inc/wnet",
+                    "WINDDK/inc/mfc42", "WINDDK/inc/atl30"],
+        "lib": ["WINDDK/lib/w2k/i386", "WINDDK/lib/crt/i386",
+                "WINDDK/lib/mfc/i386", "WINDDK/lib/atl/i386"],
+        "gs": True,
+        "cxx": "6.0",
+    },
+    "xp-vc6": {
+        "name": "Windows XP from the Windows Server 2003 SP1 DDK (3790.1830), "
+                "C++ with the Visual C++ 6.0 ABI, msvcrt.dll, msvcp60.dll and "
+                "mfc42.dll",
+        "folder": "5.2.3970.1830 DDK (unpacked)",
+        "triple": "i586-pc-windows5.1-msvc",
+        "msc": "12.00",
+        "include": ["WINDDK/inc/crt", "WINDDK/inc/wxp", "WINDDK/inc/wnet",
+                    "WINDDK/inc/mfc42", "WINDDK/inc/atl30"],
+        "lib": ["WINDDK/lib/wxp/i386", "WINDDK/lib/crt/i386",
+                "WINDDK/lib/mfc/i386", "WINDDK/lib/atl/i386"],
+        "gs": True,
+        "cxx": "6.0",
+    },
+    "ws03-vc6": {
+        "name": "Windows Server 2003 SP1 DDK (3790.1830), x86, C++ with the "
+                "Visual C++ 6.0 ABI, msvcrt.dll, msvcp60.dll and mfc42.dll",
+        "folder": "5.2.3970.1830 DDK (unpacked)",
+        "triple": "i586-pc-windows5.2-msvc",
+        "msc": "12.00",
+        "include": ["WINDDK/inc/crt", "WINDDK/inc/wnet", "WINDDK/inc/mfc42",
+                    "WINDDK/inc/atl30"],
+        "lib": ["WINDDK/lib/wnet/i386", "WINDDK/lib/crt/i386",
+                "WINDDK/lib/mfc/i386", "WINDDK/lib/atl/i386"],
+        "gs": True,
+        "intrin-shim": True,
+        "cxx": "6.0",
+    },
+    # Visual C++ itself, installed (the folder holds what setup put in
+    # "Microsoft Visual Studio" or "MSDEV"): its headers, which include the
+    # Platform SDK of the time, and its libraries, MFC's too. Programs use
+    # the C runtime DLL of that release (msvcrt40.dll for 4.0, msvcrt.dll
+    # for 4.2 to 6.0, msvcr71.dll for 2003) and its C++ library and MFC
+    # DLLs. These kits are not tested with real copies yet.
+    "vc40": {
+        "name": "Visual C++ 4.0 (msvcrt40.dll, mfc40.dll)",
+        "folder": "Visual C++ 4.0",
+        "triple": "i486-pc-windows4.0-msvc",
+        "msc": "10.00",
+        "include": ["MSDEV/INCLUDE", "MSDEV/MFC/INCLUDE"],
+        "lib": ["MSDEV/LIB", "MSDEV/MFC/LIB"],
+        "old": True,
+        "cxx": "4.0",
+    },
+    "vc42": {
+        "name": "Visual C++ 4.2 (msvcrt.dll, mfc42.dll)",
+        "folder": "Visual C++ 4.2",
+        "triple": "i486-pc-windows4.0-msvc",
+        "msc": "10.20",
+        "include": ["MSDEV/INCLUDE", "MSDEV/MFC/INCLUDE"],
+        "lib": ["MSDEV/LIB", "MSDEV/MFC/LIB"],
+        "old": True,
+        "cxx": "4.2",
+    },
+    "vc50": {
+        "name": "Visual C++ 5.0 (msvcrt.dll, msvcp50.dll, mfc42.dll)",
+        "folder": "Visual C++ 5.0",
+        "triple": "i486-pc-windows4.0-msvc",
+        "msc": "11.00",
+        "include": ["VC/INCLUDE", "VC/MFC/INCLUDE", "VC/ATL/INCLUDE"],
+        "lib": ["VC/LIB", "VC/MFC/LIB"],
+        "cxx": "5.0",
+    },
+    "vc60": {
+        "name": "Visual C++ 6.0 (msvcrt.dll, msvcp60.dll, mfc42.dll)",
+        "folder": "Visual C++ 6.0",
+        "triple": "i586-pc-windows4.0-msvc",
+        "msc": "12.00",
+        "include": ["VC98/INCLUDE", "VC98/MFC/INCLUDE", "VC98/ATL/INCLUDE"],
+        "lib": ["VC98/LIB", "VC98/MFC/LIB"],
+        "cxx": "6.0",
+    },
+    "vc71": {
+        "name": "Visual C++ .NET 2003 (msvcr71.dll, msvcp71.dll, mfc71.dll)",
+        "folder": "Visual C++ .NET 2003",
+        "triple": "i586-pc-windows4.0-msvc",
+        "msc": "13.10",
+        "include": ["Vc7/include", "Vc7/atlmfc/include",
+                    "Vc7/PlatformSDK/Include"],
+        "lib": ["Vc7/lib", "Vc7/atlmfc/lib", "Vc7/PlatformSDK/Lib"],
+        "cxx": "2003",
+    },
     # Kernel-mode kits: the DDKs' headers and libraries for drivers (.sys),
     # built with `clang --config=ms-KIT.cfg` too. "kcrt" is the kernel's C
     # library (string functions, 64-bit arithmetic, SEH) in the kit.
@@ -384,6 +486,27 @@ def kernel_flags(triple):
     return out
 
 
+def cxx_flags(kit):
+    """The flags that make clang use the C++ ABI of the Visual C++ named in
+    a C++ kit's "cxx" entry (its _MSC_VER is the kit's "msc")."""
+    return [
+        # The C runtime DLL: defines _DLL and _MT, as cl /MD did.
+        "-fms-runtime-lib=dll",
+        # wchar_t is a typedef of unsigned short, as with cl /Zc:wchar_t-
+        # (the only kind before Visual C++ 2002, and the default up to
+        # 2003): it is mangled as unsigned short (G), as the C++ library
+        # and MFC DLLs export it. (C has no wchar_t keyword.)
+        "-Xclang -fno-wchar",
+    ] + ([
+        # Visual C++ 6.0 and before had no operator new[] and delete[]: new
+        # T[n] called operator new. The msvcrt.dll of Windows 95, 98 and NT
+        # 4.0 does not have them (2000 and ME add them). When the C runtime
+        # library has no operator new[], these names take operator new.
+        "-Wl,-alternatename:??_U@YAPAXI@Z=??2@YAPAXI@Z",
+        "-Wl,-alternatename:??_V@YAXPAX@Z=??3@YAXPAX@Z",
+    ] if float(kit["msc"]) < 13 else [])
+
+
 def write_cfg(path, kit, sysname, triple, msc, defines, crtlibs, vfs, extra,
               kernel=False):
     lines = [
@@ -485,6 +608,9 @@ def import_kit(name, kitdirs, package, llvm_lib):
     includes = lower_tree(incdirs, os.path.join(sysroot, "include"), "include")
     for n in fix_headers(name, os.path.join(sysroot, "include")):
         print("%s: %s" % (name, n))
+    if kit.get("cxx"):
+        for n in fix_cxx_headers(os.path.join(sysroot, "include")):
+            print("%s: %s" % (name, n))
     libs = lower_tree(libdirs, os.path.join(sysroot, "lib"), "lib")
     if crtlibdirs:
         # Only the C runtime from the other kit, not its Windows libraries.
@@ -547,12 +673,18 @@ def import_kit(name, kitdirs, package, llvm_lib):
     if kernel:
         kern = ["wdm"] if kit.get("wdm") else ["ntoskrnl", "hal"]
         crtlibs = [l for l in kern + kit["kcrt"] if l + ".lib" in libs]
+    elif kit.get("cxx"):
+        # The C runtime DLL, as cl /MD: its import library, and the C++
+        # library's (msvcprt.lib) when a C++ header asks for it.
+        crtlibs = ["msvcrt"] if "msvcrt.lib" in libs else []
+        extra += cxx_flags(kit)
     else:
         crtlibs = [l[:-4] for l in ("libcmt.lib", "libc.lib")
                    if l in libs][:1]
     if not crtlibs:
-        print("%s: warning: no libcmt.lib or libc.lib: no C runtime" % name,
-              file=sys.stderr)
+        print("%s: warning: no %s: no C runtime" %
+              (name, "msvcrt.lib" if kit.get("cxx") else
+               "libcmt.lib or libc.lib"), file=sys.stderr)
     if "oldnames.lib" in libs and not kernel:
         crtlibs.append("oldnames")
 
@@ -836,6 +968,72 @@ def fix_headers(name, incdir):
     return notes
 
 
+# What clang needs changed in the C++ library and MFC headers of Visual
+# C++ 4.0 to 6.0 (and the DDKs, which have 6.0's): the header, and (regular
+# expression, replacement) pairs, applied to the copies. cl had no two-phase
+# name lookup, so the stream templates use ios_base's members (in, out,
+# unitbuf, oct, ...) without saying ios_base. In a template, clang does not
+# look in a base that depends on the template's arguments, and some of the
+# names (unitbuf, oct, hex) are also manipulator functions in std, which it
+# finds instead.
+OPENMODE = r"\b(in|out|trunc|app|ate|binary)\b"
+CXX_HEADER_FIXES = {
+    "istream": [(r"flags\(\) & skipws", "flags() & ios_base::skipws")],
+    "ostream": [
+        (r"flags\(\) & unitbuf", "flags() & ios_base::unitbuf"),
+        (r"_Bfl == oct \|\| _Bfl == hex",
+         "_Bfl == ios_base::oct || _Bfl == ios_base::hex"),
+    ],
+    # A default argument of an openmode (in fstream and sstream).
+    "fstream": [("openmode-defaults", None)],
+    "sstream": [("openmode-defaults", None)],
+    # "typename const T::type&" is "const typename T::type&", and
+    # bind1st and bind2nd make a T::type without "typename".
+    "functional": [
+        (r"typename const (\w+)::", r"const typename \1::"),
+        (r"(?<!typename )\b(_Bfn::\w+_argument_type)\(", r"typename \1("),
+    ],
+    # Two operators that MFC 4.2 declares with an implicit int.
+    "afxwin1.inl": [
+        (r"_AFXWIN_INLINE CMenu::operator(==|!=)",
+         r"_AFXWIN_INLINE BOOL CMenu::operator\1"),
+    ],
+}
+
+
+def fix_openmode_defaults(text):
+    """Qualify the openmode flags in default arguments ("openmode _M = in |
+    out") with ios_base::."""
+    def qualify(m):
+        return m.group(1) + re.sub(r"(?<!::)" + OPENMODE, r"ios_base::\1",
+                                   m.group(2))
+    return re.sub(r"(openmode\s+\w+\s*=)([^,)]*)", qualify, text)
+
+
+def fix_cxx_headers(incdir):
+    """Apply CXX_HEADER_FIXES to the C++ library and MFC headers in incdir.
+    Returns notes for the user."""
+    notes = []
+    for hdr, fixes in CXX_HEADER_FIXES.items():
+        p = os.path.join(incdir, hdr)
+        if not os.path.exists(p):
+            continue
+        with open(p, "rb") as f:
+            data = f.read()
+        text = data.decode("latin-1")
+        old = text
+        for pat, rep in fixes:
+            if pat == "openmode-defaults":
+                text = fix_openmode_defaults(text)
+            else:
+                text = re.sub(pat, rep, text)
+        if text != old:
+            with open(p, "wb") as f:
+                f.write(text.encode("latin-1"))
+            notes.append("fixed %s for clang" % hdr)
+    return notes
+
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHIM = "clang-dos-ms-intrin-shim.h"
 
@@ -911,7 +1109,7 @@ def main():
 
     if a.list:
         for k, v in KITS.items():
-            print("%-9s %-27s %s\n%9s %s" % (k, v["triple"], v["name"], "",
+            print("%-9s %-27s %s\n%9s %s" % (k, v.get("triple", ""), v["name"], "",
                                               v["folder"]))
         return 0
     if not a.package:
