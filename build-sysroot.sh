@@ -22,6 +22,9 @@
 #   WORK            build directory (default: ./build-sysroot-NAME)
 #   WIDL            a widl for the build machine (optional; otherwise one is
 #                   built from MINGW_SRC with HOST_CC or cc)
+#   GCC_SRC         unpacked GCC release (optional): adds GCC's C++ library,
+#                   libstdc++, next to libc++ (scripts/build-libstdcxx.sh).
+#                   Not for win32-picolibc.
 set -e
 name=${1:?usage: build-sysroot.sh NAME OUTPUT} out=${2:?}
 : "${BIN:?set BIN}" "${LLVM_SRC:?set LLVM_SRC}" "${MINGW_SRC:?set MINGW_SRC}"
@@ -63,6 +66,17 @@ win-vista-x64)
 *)
   echo "unknown sysroot $name" >&2; exit 1 ;;
 esac
+# GCC's C++ library, for -stdlib=libstdc++, when GCC_SRC is set.
+if [ -n "${GCC_SRC:-}" ] && [ "$name" != win32-picolibc ]; then
+  case $name in
+  win2k-xp) lsx_arch=i686 lsx_cpu=i586 ;;
+  win-vista) lsx_arch=i686 lsx_cpu=i686 ;;
+  win-vista-x64) lsx_arch=x86_64 lsx_cpu= ;;
+  *) lsx_arch=i686 lsx_cpu=i386 ;;
+  esac
+  WORK=$WORK/libstdcxx ARCH=$lsx_arch CPU=$lsx_cpu GCC_SRC=$GCC_SRC \
+    sh "$here/scripts/build-libstdcxx.sh"
+fi
 # Declarations in the API headers corrected to match the Windows SDK's.
 sh "$here/scripts/fix-api-headers.sh"
 # Visual C++'s COM support library, for comdef.h and #import. Not for
