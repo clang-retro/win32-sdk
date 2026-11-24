@@ -1,0 +1,400 @@
+Changes to GCC 15.2.0 for libstdc++ compiled by clang, for the Windows
+sysroots of clang-retro/win32-sdk (scripts/build-libstdcxx.sh).
+
+- eh_globals.cc: clang wants an initializer for constant initialization.
+- eh_personality.cc: <windows.h> for the SEH personality (x86_64), which
+  clang's <unwind.h> does not include.
+- tinfo.cc: clang does not accept the alias attribute on the declaration
+  of a member function; type_info::__equal is a definition.
+- assert_fail.cc: the same noreturn attribute as the first declaration.
+- random.cc: clang's name for the 32-bit rdseed built-in.
+- string-inst.cc: the copy-on-write string's data() is not noexcept.
+- experimental/bits/fs_path.h: clang checks the non-dependent throw of
+  filesystem_error in a template before the class is complete.
+- src/c++11/Makefile: no -gno-as-loc-support, which is GCC's only.
+- os_defines.h (mingw-w64): below XP (_WIN32_WINNT 0x0501), no
+  GetModuleHandleExW for thread_local destructors and no rand_s, which
+  calls LoadLibraryW and RtlGenRandom.
+- chrono.cc: below 2000, system_clock looks up GetSystemTimeAsFileTime at
+  run time, as NT 3.1 and Win32s do not have it.
+- basic_file_stdio.cc: below 2000, a wide file name is opened with the
+  _wfopen found at run time on NT, and converted to the ANSI code page on
+  95, 98 and ME, where _wfopen is a stub.
+- gthr-win32.h: condition variables below Vista with the functions of
+  gthr-win32-compat.c (__GTHREAD_WIN32_COMPAT), which free them.
+--- a/libstdc++-v3/config/io/basic_file_stdio.cc
++++ b/libstdc++-v3/config/io/basic_file_stdio.cc
+@@ -69,6 +69,11 @@
+ #if _GLIBCXX_USE__GET_OSFHANDLE
+ # include <stdint.h> // For intptr_t
+ # include <io.h>     // For _get_osfhandle
++# if _GLIBCXX_HAVE__WFOPEN && _WIN32_WINNT < 0x0500
++#  define WIN32_LEAN_AND_MEAN
++#  define NOMINMAX
++#  include <windows.h> // For __win9x_wfopen
++# endif
+ #endif
+ 
+ namespace
+@@ -267,6 +272,37 @@
+   }
+ 
+ #if _GLIBCXX_HAVE__WFOPEN && _GLIBCXX_USE_WCHAR_T
++#if defined (_WIN32) && _WIN32_WINNT < 0x0500
++namespace
++{
++  // The _wfopen of msvcrt.dll is a stub on Windows 95, 98 and ME. For a
++  // Windows before 2000 (_WIN32_WINNT), it is looked up at run time and
++  // used on NT; on 9x the name is converted to the ANSI code page for
++  // fopen.
++  FILE*
++  __win9x_wfopen(const wchar_t* __name, const wchar_t* __wc_mode,
++		 const char* __c_mode)
++  {
++    if (!(GetVersion() & 0x80000000))
++      {
++	typedef FILE* (__cdecl *__wfopen_fn)(const wchar_t*, const wchar_t*);
++	__wfopen_fn __wfopen = reinterpret_cast<__wfopen_fn>(
++	  reinterpret_cast<void*>(GetProcAddress(GetModuleHandleA("msvcrt.dll"),
++						 "_wfopen")));
++	if (__wfopen)
++	  return __wfopen(__name, __wc_mode);
++      }
++    int __len = WideCharToMultiByte(CP_ACP, 0, __name, -1, 0, 0, 0, 0);
++    if (__len <= 0)
++      return 0;
++    char* __aname = static_cast<char*>(__builtin_alloca(__len));
++    if (!WideCharToMultiByte(CP_ACP, 0, __name, -1, __aname, __len, 0, 0))
++      return 0;
++    return fopen(__aname, __c_mode);
++  }
++}
++#endif
++
+   __basic_file<char>*
+   __basic_file<char>::open(const wchar_t* __name, ios_base::openmode __mode)
+   {
+@@ -289,7 +325,11 @@
+ 	  }
+ 	while (__c_mode[++__i]);
+ 
++#if defined (_WIN32) && _WIN32_WINNT < 0x0500
++	if ((_M_cfile = __win9x_wfopen(__name, __wc_mode, __c_mode)))
++#else
+ 	if ((_M_cfile = _wfopen(__name, __wc_mode)))
++#endif
+ 	  {
+ 	    _M_cfile_created = true;
+ 	    __ret = this;
+--- a/libstdc++-v3/config/os/mingw32-w64/os_defines.h
++++ b/libstdc++-v3/config/os/mingw32-w64/os_defines.h
+@@ -82,8 +82,11 @@
+ 
+ // Enable use of GetModuleHandleEx (requires Windows XP/2003) in
+ // __cxa_thread_atexit to prevent modules from being unloaded before
+-// their dtors are called
++// their dtors are called. GetModuleHandleExW, which does it, is in XP and
++// later; the library for an earlier Windows (_WIN32_WINNT) does without.
++#if !defined (_WIN32_WINNT) || _WIN32_WINNT >= 0x0501
+ #define _GLIBCXX_THREAD_ATEXIT_WIN32 1
++#endif
+ 
+ // Enable use of GetSystemInfo to implement get_nprocs
+ #define _GLIBCXX_USE_GET_NPROCS_WIN32 1
+@@ -91,7 +94,11 @@
+ // See libstdc++/59807
+ #define _GTHREAD_USE_MUTEX_INIT_FUNC 1
+ 
++// rand_s needs the msvcrt.dll of Vista or RtlGenRandom of XP; the
++// library for an earlier Windows (_WIN32_WINNT) does without.
++#if !defined (_WIN32_WINNT) || _WIN32_WINNT >= 0x0501
+ #define _GLIBCXX_USE_CRT_RAND_S 1
++#endif
+ 
+ // See libstdc++/94268
+ #define _GLIBCXX_BUFSIZ 4096
+--- a/libstdc++-v3/include/experimental/bits/fs_path.h
++++ b/libstdc++-v3/include/experimental/bits/fs_path.h
+@@ -597,6 +597,12 @@
+       return __is;
+     }
+ 
++  /// @cond undocumented
++  // Throws filesystem_error, which is not complete here. clang checks
++  // the non-dependent throw expressions of a template where it is defined.
++  [[noreturn]] inline void __throw_u8path_error();
++  /// @endcond
++
+   /// Create a path from a UTF-8-encoded sequence of char
+ #ifdef _GLIBCXX_FILESYSTEM_IS_WINDOWS
+   template<typename _InputIterator>
+@@ -610,9 +616,7 @@
+       const char* const __ptr = __u8str.data();
+       if (__str_codecvt_in_all(__ptr, __ptr + __u8str.size(), __tmp, __cvt))
+ 	return path{ __tmp };
+-      _GLIBCXX_THROW_OR_ABORT(filesystem_error(
+-	    "Cannot convert character sequence",
+-	    std::make_error_code(errc::illegal_byte_sequence)));
++      __throw_u8path_error();
+     }
+ 
+ #ifdef _GLIBCXX_USE_CHAR8_T
+@@ -720,6 +724,16 @@
+   };
+ 
+   /// @cond undocumented
++  inline void
++  __throw_u8path_error()
++  {
++    _GLIBCXX_THROW_OR_ABORT(filesystem_error(
++	    "Cannot convert character sequence",
++	    std::make_error_code(errc::illegal_byte_sequence)));
++  }
++  /// @endcond
++
++  /// @cond undocumented
+   struct path::_Cmpt : path
+   {
+     _Cmpt(string_type __s, _Type __t, size_t __pos)
+@@ -1073,9 +1087,7 @@
+ 	    return __wstr;
+         }
+ #endif
+-      _GLIBCXX_THROW_OR_ABORT(filesystem_error(
+-	    "Cannot convert character sequence",
+-	    std::make_error_code(errc::illegal_byte_sequence)));
++      __throw_u8path_error();
+     }
+ #pragma GCC diagnostic pop
+ 
+--- a/libstdc++-v3/libsupc++/eh_globals.cc
++++ b/libstdc++-v3/libsupc++/eh_globals.cc
+@@ -71,7 +71,7 @@
+ namespace
+ {
+   // Single-threaded fallback buffer.
+-  __constinit __cxa_eh_globals eh_globals;
++  __constinit __cxa_eh_globals eh_globals{}; // clang: an initializer
+ }
+ 
+ #if __GTHREADS
+--- a/libstdc++-v3/libsupc++/eh_personality.cc
++++ b/libstdc++-v3/libsupc++/eh_personality.cc
+@@ -32,6 +32,14 @@
+ using namespace __cxxabiv1;
+ 
+ #include "unwind-pe.h"
++#if defined (__SEH__) && !defined (__USING_SJLJ_EXCEPTIONS__) && defined (__clang__)
++// GCC's <unwind.h> gives the SEH types of <windows.h> and the handler of
++// libgcc (libunwind has the same), clang's does not.
++#include <windows.h>
++extern "C" EXCEPTION_DISPOSITION
++_GCC_specific_handler (PEXCEPTION_RECORD, void *, PCONTEXT,
++		       PDISPATCHER_CONTEXT, _Unwind_Personality_Fn);
++#endif
+ 
+ 
+ struct lsda_header_info
+--- a/libstdc++-v3/libsupc++/tinfo.cc
++++ b/libstdc++-v3/libsupc++/tinfo.cc
+@@ -51,9 +51,11 @@
+ #endif
+ }
+ 
++// clang does not accept the alias attribute on a member function
++// declaration, as GCC does; a definition does the same.
+ bool
+ std::type_info::__equal (const std::type_info& arg) const _GLIBCXX_NOEXCEPT
+-__attribute__((alias("_ZNKSt9type_infoeqERKS_")));
++{ return *this == arg; }
+ #endif
+ 
+ namespace std {
+--- a/libstdc++-v3/src/c++11/Makefile.am
++++ b/libstdc++-v3/src/c++11/Makefile.am
+@@ -173,12 +173,12 @@
+ rewrite_ios_failure_typeinfo = sed -e '/^_*_ZTISt13__ios_failure:/,/_ZTVN10__cxxabiv120__si_class_type_infoE/s/_ZTVN10__cxxabiv120__si_class_type_infoE/_ZTVSt19__iosfail_type_info/'
+ 
+ cxx11-ios_failure-lt.s: cxx11-ios_failure.cc
+-	$(LTCXXCOMPILE) -gno-as-loc-support -S $< -o tmp-cxx11-ios_failure-lt.s
++	$(LTCXXCOMPILE) -S $< -o tmp-cxx11-ios_failure-lt.s
+ 	-test -f tmp-cxx11-ios_failure-lt.o && mv -f tmp-cxx11-ios_failure-lt.o tmp-cxx11-ios_failure-lt.s
+ 	$(rewrite_ios_failure_typeinfo) tmp-$@ > $@
+ 	-rm -f tmp-$@
+ cxx11-ios_failure.s: cxx11-ios_failure.cc
+-	$(CXXCOMPILE) -gno-as-loc-support -S $< -o tmp-$@
++	$(CXXCOMPILE) -S $< -o tmp-$@
+ 	$(rewrite_ios_failure_typeinfo) tmp-$@ > $@
+ 	-rm -f tmp-$@
+ 
+--- a/libstdc++-v3/src/c++11/Makefile.in
++++ b/libstdc++-v3/src/c++11/Makefile.in
+@@ -897,12 +897,12 @@
+ 	$(CXXCOMPILE) -fchar8_t -c $<
+ 
+ @ENABLE_DUAL_ABI_TRUE@cxx11-ios_failure-lt.s: cxx11-ios_failure.cc
+-@ENABLE_DUAL_ABI_TRUE@	$(LTCXXCOMPILE) -gno-as-loc-support -S $< -o tmp-cxx11-ios_failure-lt.s
++@ENABLE_DUAL_ABI_TRUE@	$(LTCXXCOMPILE) -S $< -o tmp-cxx11-ios_failure-lt.s
+ @ENABLE_DUAL_ABI_TRUE@	-test -f tmp-cxx11-ios_failure-lt.o && mv -f tmp-cxx11-ios_failure-lt.o tmp-cxx11-ios_failure-lt.s
+ @ENABLE_DUAL_ABI_TRUE@	$(rewrite_ios_failure_typeinfo) tmp-$@ > $@
+ @ENABLE_DUAL_ABI_TRUE@	-rm -f tmp-$@
+ @ENABLE_DUAL_ABI_TRUE@cxx11-ios_failure.s: cxx11-ios_failure.cc
+-@ENABLE_DUAL_ABI_TRUE@	$(CXXCOMPILE) -gno-as-loc-support -S $< -o tmp-$@
++@ENABLE_DUAL_ABI_TRUE@	$(CXXCOMPILE) -S $< -o tmp-$@
+ @ENABLE_DUAL_ABI_TRUE@	$(rewrite_ios_failure_typeinfo) tmp-$@ > $@
+ @ENABLE_DUAL_ABI_TRUE@	-rm -f tmp-$@
+ 
+--- a/libstdc++-v3/src/c++11/assert_fail.cc
++++ b/libstdc++-v3/src/c++11/assert_fail.cc
+@@ -28,7 +28,7 @@
+ #include <cstdio>	// for std::fprintf, stderr
+ namespace std
+ {
+-  [[__noreturn__]]
++  _GLIBCXX_NORETURN // as the declaration in <bits/c++config.h>
+   void
+   __glibcxx_assert_fail(const char* file, int line,
+ 			const char* function, const char* condition) noexcept
+--- a/libstdc++-v3/src/c++11/chrono.cc
++++ b/libstdc++-v3/src/c++11/chrono.cc
+@@ -37,6 +37,40 @@
+ #include <sys/syscall.h>
+ #endif
+ 
++#if defined(_WIN32) && _WIN32_WINNT < 0x0500
++#define WIN32_LEAN_AND_MEAN
++#include <windows.h>
++
++namespace
++{
++  // Gives the time since 1/1/1970 in nanoseconds, from
++  // GetSystemTimeAsFileTime where Windows has it (NT 3.5, 95 and later),
++  // and from GetSystemTime otherwise.
++  long long
++  __win32_system_time() noexcept
++  {
++    typedef VOID (WINAPI *__get_time_fn)(LPFILETIME);
++    static __get_time_fn __get_time = reinterpret_cast<__get_time_fn>(
++      reinterpret_cast<void*>(GetProcAddress(GetModuleHandleA("kernel32.dll"),
++					     "GetSystemTimeAsFileTime")));
++    FILETIME __ft;
++    if (__get_time)
++      __get_time(&__ft);
++    else
++      {
++	SYSTEMTIME __st;
++	GetSystemTime(&__st);
++	SystemTimeToFileTime(&__st, &__ft);
++      }
++    unsigned long long __t
++      = (static_cast<unsigned long long>(__ft.dwHighDateTime) << 32)
++	| __ft.dwLowDateTime;
++    // From 100 ns since 1/1/1601.
++    return static_cast<long long>(__t - 116444736000000000ULL) * 100;
++  }
++}
++#endif
++
+ namespace std _GLIBCXX_VISIBILITY(default)
+ {
+ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+@@ -60,6 +94,10 @@
+ #endif
+       return time_point(duration(chrono::seconds(tp.tv_sec)
+ 				 + chrono::nanoseconds(tp.tv_nsec)));
++#elif defined(_WIN32) && _WIN32_WINNT < 0x0500
++      // mingw-w64's gettimeofday calls GetSystemTimeAsFileTime, which
++      // NT 3.1 and Win32s do not have; it is looked up at run time.
++      return time_point(duration(chrono::nanoseconds(__win32_system_time())));
+ #elif defined(_GLIBCXX_USE_GETTIMEOFDAY)
+       timeval tv;
+       // EINVAL, EFAULT
+--- a/libstdc++-v3/src/c++11/random.cc
++++ b/libstdc++-v3/src/c++11/random.cc
+@@ -115,6 +115,14 @@
+ #endif
+ 
+ #if USE_RDSEED
++// clang has the 32-bit rdseed builtin under its Intel name.
++# ifdef __clang__
++#  define _GLIBCXX_RDSEED32_STEP __builtin_ia32_rdseed32_step
++# else
++#  define _GLIBCXX_RDSEED32_STEP __builtin_ia32_rdseed_si_step
++# endif
++#endif
++#if USE_RDSEED
+     unsigned int
+     __attribute__ ((target("rdseed")))
+     __x86_rdseed(void* fallback)
+@@ -122,7 +130,7 @@
+       unsigned int retries = 100;
+       unsigned int val;
+ 
+-      while (__builtin_ia32_rdseed_si_step(&val) == 0) [[__unlikely__]]
++      while (_GLIBCXX_RDSEED32_STEP(&val) == 0) [[__unlikely__]]
+ 	{
+ 	  if (--retries == 0)
+ 	    {
+--- a/libstdc++-v3/src/c++17/string-inst.cc
++++ b/libstdc++-v3/src/c++17/string-inst.cc
+@@ -42,14 +42,22 @@
+ template basic_string<char>::__sv_wrapper::__sv_wrapper(string_view);
+ template string_view basic_string<char>::_S_to_string_view(string_view);
+ template basic_string<char>::operator string_view() const noexcept;
++#if _GLIBCXX_USE_CXX11_ABI
+ template char* basic_string<char>::data() noexcept;
++#else // the copy-on-write string's data() can throw
++template char* basic_string<char>::data();
++#endif
+ 
+ #ifdef _GLIBCXX_USE_WCHAR_T
+ template basic_string<wchar_t>::basic_string(__sv_wrapper, const allocator_type&);
+ template basic_string<wchar_t>::__sv_wrapper::__sv_wrapper(wstring_view);
+ template wstring_view basic_string<wchar_t>::_S_to_string_view(wstring_view);
+ template basic_string<wchar_t>::operator wstring_view() const noexcept;
++#if _GLIBCXX_USE_CXX11_ABI
+ template wchar_t* basic_string<wchar_t>::data() noexcept;
++#else // the copy-on-write string's data() can throw
++template wchar_t* basic_string<wchar_t>::data();
++#endif
+ #endif
+ 
+ _GLIBCXX_END_NAMESPACE_VERSION
+--- a/libgcc/config/i386/gthr-win32.h
++++ b/libgcc/config/i386/gthr-win32.h
+@@ -61,8 +61,10 @@
+ 
+ #define __GTHREADS 1
+ 
+-/* Condition variables are supported on Vista and Server 2008 or later.  */
+-#if _WIN32_WINNT >= 0x0600
++/* Condition variables are supported on Vista and Server 2008 or later,
++   and on every version with the functions of clang-retro's
++   gthr-win32-compat.c (__GTHREAD_WIN32_COMPAT).  */
++#if _WIN32_WINNT >= 0x0600 || __GTHREAD_WIN32_COMPAT
+ #define __GTHREAD_HAS_COND 1
+ #define __GTHREADS_CXX0X 1
+ #endif
+@@ -447,6 +449,9 @@
+ extern int __gthr_win32_cond_wait (__gthread_cond_t *, __gthread_mutex_t *);
+ extern int __gthr_win32_cond_timedwait (__gthread_cond_t *, __gthread_mutex_t *,
+ 					const __gthread_time_t *);
++#if __GTHREAD_WIN32_COMPAT
++extern int __gthr_win32_cond_destroy (__gthread_cond_t *);
++#endif
+ #endif
+ 
+ __GTHREAD_INLINE int
+@@ -868,7 +873,12 @@
+ __GTHREAD_INLINE int
+ __gthread_cond_destroy (__gthread_cond_t *__cond ATTRIBUTE_UNUSED)
+ {
++#if __GTHREAD_WIN32_COMPAT
++  /* The compat condition variable frees its queue of waiting threads.  */
++  return __gthr_win32_cond_destroy (__cond);
++#else
+   return 0;
++#endif
+ }
+ 
+ __GTHREAD_INLINE int

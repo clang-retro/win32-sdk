@@ -121,12 +121,15 @@ int main() {
   CHECK(sm.try_lock());
   sm.unlock();
 
-  // Thread IDs: GetThreadId is from Server 2003.
+  // Thread IDs: GetThreadId is from Server 2003. The ID of this thread is
+  // taken first: with libstdc++, an ID is a thread handle, and a joined
+  // thread's handle can come back as the ID of a thread that asks later.
+  std::thread::id self = std::this_thread::get_id();
   std::thread::id inner;
   std::thread t([&] { inner = std::this_thread::get_id(); });
   std::thread::id outer = t.get_id();
   t.join();
-  CHECK(inner == outer && inner != std::this_thread::get_id());
+  CHECK(inner == outer && inner != self);
 
   // thread_local: each thread has its own, and destructors run when the
   // thread exits.

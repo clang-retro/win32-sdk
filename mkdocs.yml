@@ -27,6 +27,7 @@ nav:
   - "Windows NT 3.x": nt3.md
   - "Windows 2000 and XP": win2k-xp.md
   - "C++": cxx.md
+  - "libstdc++": libstdcxx.md
   - "picolibc instead of the CRT": picolibc.md
   - "Kernel-mode drivers": drivers.md
   - "Checks and tests": checks.md

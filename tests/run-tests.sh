@@ -18,7 +18,8 @@
 # When the sysroot has libunicows.a (build-unicows.sh), the tests include a
 # Unicode build linked with it. When it has libc++.a (build-cxx.sh), the
 # tests include C++ programs, and with libcomsupp.a (build-comsupp.sh) the
-# compiler COM support. Wine reports the target's Windows version to
+# compiler COM support. When it has libstdc++ (build-libstdcxx.sh), the C++
+# tests are built with it too (the -gnu tests). Wine reports the target's Windows version to
 # each program (95, 98 or ME for the 4.x triples), so libc++ takes the paths
 # it takes there.
 : "${BIN:?set BIN}" "${SYSROOT:?set SYSROOT}"
@@ -37,6 +38,9 @@ wide=
 "$BIN/llvm-nm" "$SYSROOT/lib/libmsvcrt.a" 2>/dev/null |
   grep -q __wgetmainargs && wide=1
 [ -n "$wide" ] && [ -f "$SYSROOT/lib/libunicows.a" ] && tests="$tests unicode"
+# libstdc++, when build-libstdcxx.sh added it.
+gnucxx=
+ls "$SYSROOT"/lib/gcc/mingw32/*/libstdc++.a >/dev/null 2>&1 && gnucxx=1
 
 ok() { pass=$((pass + 1)); }
 bad() {
@@ -69,6 +73,17 @@ for target in ${TARGETS:-i386-pc-windows4.0-gnu i486-pc-windows4.10-gnu \
   [ -f "$SYSROOT/lib/libc++.a" ] && ttests="$ttests cxx threads fs tlsmain"
   [ -f "$SYSROOT/lib/libc++.a" ] && [ -f "$SYSROOT/lib/libcomsupp.a" ] &&
     ttests="$ttests com"
+  # The same C++ tests with libstdc++ (build-libstdcxx.sh). Its
+  # std::filesystem calls the wide C library and the W file functions, so
+  # fs-gnu needs a wide C library and Windows NT.
+  if [ -n "$gnucxx" ]; then
+    ttests="$ttests cxx-gnu threads-gnu tlsmain-gnu"
+    [ -f "$SYSROOT/lib/libcomsupp.a" ] && ttests="$ttests com-gnu"
+    case $target in
+      *-windows4.*) ;;
+      *) [ -n "$wide" ] && ttests="$ttests fs-gnu" ;;
+    esac
+  fi
   for opt in ${OPTS:-O0 O2 Os}; do
     for t in $ttests; do
       name=$t-$target-$opt
@@ -84,11 +99,18 @@ for target in ${TARGETS:-i386-pc-windows4.0-gnu i486-pc-windows4.10-gnu \
           cc="$BIN/clang++"
           src=$here/$t.cpp
           flags="-std=c++20 -stdlib=libc++"
-          [ $t = com ] && flags="$flags -lcomsupp -loleaut32 -lole32 -luuid"
+          ;;
+        *-gnu)
+          cc="$BIN/clang++"
+          src=$here/${t%-gnu}.cpp
+          flags="-std=c++20 -stdlib=libstdc++"
           ;;
       esac
+      case $t in
+        com | com-gnu) flags="$flags -lcomsupp -loleaut32 -lole32 -luuid" ;;
+      esac
       # tlsmain loads a C++ DLL with thread_local variables at run time.
-      if [ $t = tlsmain ]; then
+      if [ $t = tlsmain ] || [ $t = tlsmain-gnu ]; then
         args=$name-dll.dll
         check="$check $args"
         if ! "$cc" --target=$target --sysroot="$SYSROOT" -fuse-ld=lld \
@@ -110,7 +132,7 @@ for target in ${TARGETS:-i386-pc-windows4.0-gnu i486-pc-windows4.10-gnu \
       fi
       case $t in
         hello) want="hello, world" ;;
-        libc | tchar | unicode | cxx | threads | fs | tlsmain | com)
+        libc | tchar | unicode | cxx | threads | fs | tlsmain | com | *-gnu)
           want="ALL PASSED" ;;
         *) want= ;;
       esac

@@ -13,6 +13,8 @@ build-sysroot.sh                 builds one of the package's sysroots (below)
 scripts/build-win9x.sh           mingw-w64 sysroot for 9x, NT 3.x/4.0, 2000/XP
 scripts/build-unicows.sh         adds libunicows to it
 scripts/build-cxx.sh             adds libc++, libc++abi and libunwind (9x to XP)
+scripts/build-libstdcxx.sh       adds libstdc++, GCC's C++ library (optional)
+scripts/libstdcxx/               its GCC patch and thread functions
 scripts/build-modern-sysroot.sh  sysroot for Vista and later, with libc++
 scripts/fix-ddk-headers.sh       fixes mingw-w64's DDK headers in a sysroot
 scripts/fix-api-headers.sh       corrects API header declarations to match the SDK
@@ -56,6 +58,22 @@ dos-sdk's toolchain workflow checks out this repository at `main` (or the
 `build-sysroot.sh` and puts them and `cfg/` in the package, whose smoke
 test builds a program for each Windows version, checks it with
 `check-imports.py` and runs it in Wine.
+
+### libstdc++
+
+With `GCC_SRC` set to an unpacked GCC 15.2.0 release, `build-sysroot.sh`
+also adds GCC's C++ library, libstdc++, to every sysroot except
+`win32-picolibc` (`scripts/build-libstdcxx.sh`). clang compiles it.
+libc++ stays the default; add `-stdlib=libstdc++` to use libstdc++, with
+threads from Windows 95 and NT 3.1:
+
+```sh
+clang++ --config=win98.cfg -stdlib=libstdc++ -O2 hello.cpp -o hello.exe
+```
+
+[docs/libstdcxx.md](docs/libstdcxx.md) tells how it is built, what it
+changes for old Windows, its limits, and how to connect code to Visual
+C++ (the MSVC ABI).
 
 ## Windows 95, 98, ME, NT and 2000/XP
 
