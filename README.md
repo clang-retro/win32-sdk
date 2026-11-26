@@ -363,7 +363,11 @@ clang++ --target=i586-pc-windows5.1-gnu --sysroot=$SYSROOT -fuse-ld=lld \
     `std::condition_variable` a queue of waiting threads with an event
     each; `call_once` is an interlocked flag; thread-specific data uses
     `TlsAlloc` with destructors run from the mingw-w64 runtime's thread
-    exit callback; `std::thread::get_id` uses `NtQueryInformationThread`
+    exit callback. Windows 9x does not run TLS callbacks, so there
+    `crtbegin.o` (`scripts/tls9x.c`) runs the program's callbacks at
+    startup, and a `std::thread` runs them when its function returns;
+    a thread that `CreateThread` starts does not run its `thread_local`
+    destructors on 9x; `std::thread::get_id` uses `NtQueryInformationThread`
     when there is no `GetThreadId`; `atomic::wait` polls.
   * locales: a locale is its name, set with `setlocale` for each call that
     takes one. The "C" locale costs a `setlocale(LC_ALL, NULL)` per call.
