@@ -457,10 +457,12 @@ What it adds over the system C runtime:
 
 The headers are mingw-w64's Windows API headers (`windows.h` and the
 rest) with picolibc's C library headers in place of mingw-w64's.
-Microsoft-only C runtime headers and functions (`<tchar.h>`, `<conio.h>`,
-`<direct.h>`, `_stricmp` and the like) are not there; `<io.h>` and
-`<process.h>` have the descriptor and thread functions (`_get_osfhandle`,
-`_open_osfhandle`, `_beginthreadex`).
+picolibc also has the Microsoft C runtime headers and functions that
+Windows programs use most: `<tchar.h>`, `<conio.h>`, `<direct.h>`,
+`<float.h>` (`_controlfp`), `_stricmp`, `_snprintf`, `_findfirst`,
+`struct _stat` and the like. `<io.h>` and `<process.h>` have the
+descriptor and thread functions (`_get_osfhandle`, `_open_osfhandle`,
+`_beginthreadex`). The full list is in picolibc's `libos/win32/README.md`.
 
 The config file passes `-fno-emulated-tls`: picolibc's `errno` and C++
 `thread_local` variables are native TLS. DLLs that a program loads at
