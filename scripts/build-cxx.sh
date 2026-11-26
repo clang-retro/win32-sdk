@@ -13,6 +13,10 @@
 #             on an 80386 (see ../README.md).
 #   LIBC      the sysroot's C library: mingw (default; msvcrt.dll or
 #             crtdll.dll) or picolibc (a sysroot from build-picolibc.sh)
+#   EMUTLS    with LIBC=picolibc: 1 builds the libraries with emulated TLS
+#             into $SYSROOT/lib/emutls, beside picolibc's emulated TLS
+#             build, for DLLs that LoadLibrary loads before Vista. The
+#             headers are not installed again.
 #
 # The libraries are static. They use emulated TLS, like programs for
 # versions before Vista (see ../README.md), and the code that the sysroot's
@@ -40,15 +44,20 @@ if [ "${LIBC:-mingw}" = picolibc ]; then
   # emutls; the libraries can't be linked into test programs before the
   # sysroot has them, so CMake only compiles its checks.
   FLAGS="-march=$CPU --sysroot=$SYSROOT -fno-emulated-tls"
+  [ "${EMUTLS:-0}" = 1 ] && FLAGS="-march=$CPU --sysroot=$SYSROOT -femulated-tls"
   EXTRA="-DRUNTIMES_USE_LIBC=picolibc -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY"
 fi
+# The emulated TLS libraries go to a staging directory first, and only
+# the libraries to $SYSROOT/lib/emutls.
+PREFIX=$SYSROOT
+[ "${EMUTLS:-0}" = 1 ] && PREFIX=$WORK/install
 # clang turns sized deallocation off for MinGW, but libc++'s
 # memory_resource.cpp calls the sized aligned operator delete.
 CXXFLAGS="$FLAGS -fsized-deallocation"
 cmake -G Ninja -S "$LLVM_SRC/runtimes" -B "$WORK" \
   -DLLVM_ENABLE_RUNTIMES="libunwind;libcxxabi;libcxx" \
   -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX="$SYSROOT" \
+  -DCMAKE_INSTALL_PREFIX="$PREFIX" \
   -DCMAKE_C_COMPILER="$BIN/clang" -DCMAKE_CXX_COMPILER="$BIN/clang++" \
   -DCMAKE_ASM_COMPILER="$BIN/clang" \
   -DCMAKE_C_COMPILER_TARGET=$TARGET -DCMAKE_CXX_COMPILER_TARGET=$TARGET \
@@ -69,6 +78,13 @@ cmake -G Ninja -S "$LLVM_SRC/runtimes" -B "$WORK" \
   $EXTRA >"$WORK/cmake.log"
 ninja -C "$WORK" >"$WORK/build.log"
 ninja -C "$WORK" install >/dev/null
+if [ "${EMUTLS:-0}" = 1 ]; then
+  mkdir -p "$SYSROOT/lib/emutls"
+  cp "$PREFIX"/lib/libc++.a "$PREFIX"/lib/libc++abi.a "$PREFIX"/lib/libc++experimental.a \
+    "$PREFIX"/lib/libunwind.a "$SYSROOT/lib/emutls/"
+  echo "libc++ with emulated TLS installed in $SYSROOT/lib/emutls"
+  exit 0
+fi
 
 # clang links -lgcc_s (or -lgcc_eh with -static-libgcc) for C++ on MinGW;
 # the static libunwind takes their place.

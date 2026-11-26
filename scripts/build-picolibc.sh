@@ -109,8 +109,25 @@ cp -R "$WORK/picolibc-install/include/." "$SYSROOT/include/"
 cp "$WORK/picolibc-install/lib/libc.a" "$WORK/picolibc-install/lib/libm.a" \
   "$SYSROOT/lib/"
 
+# picolibc again with emulated TLS, into lib/emutls: a DLL that LoadLibrary
+# loads before Vista gets no native TLS, so such a DLL links these
+# (cfg/win32-picolibc-emutls.cfg). The headers are the same.
+rm -rf "$WORK/picolibc-emutls" "$WORK/picolibc-emutls-install"
+meson setup "$WORK/picolibc-emutls" "$PICOLIBC_SRC" --cross-file "$cross" \
+  -Dc_std=c11 -Dos-win32=true -Dwin32-emutls=true -Denable-malloc=false \
+  -Dinitfini-array=false -Dmultilib=false -Dpicocrt=false -Dsemihost=false \
+  -Dtests=false -Dspecsdir=none -Dposix-console=true -Dmb-capable=true \
+  -Dio-wchar=true -Dio-pos-args=true -Dio-long-double=true \
+  --prefix="$WORK/picolibc-emutls-install" >"$WORK/picolibc-emutls-setup.log"
+ninja -C "$WORK/picolibc-emutls" install >"$WORK/picolibc-emutls-build.log"
+mkdir -p "$SYSROOT/lib/emutls"
+cp "$WORK/picolibc-emutls-install/lib/libc.a" \
+  "$WORK/picolibc-emutls-install/lib/libm.a" "$SYSROOT/lib/emutls/"
+
 # libc++, libc++abi and libunwind on picolibc.
 WORK=$WORK/cxx CPU=$CPU LIBC=picolibc SYSROOT=$SYSROOT sh "$here/build-cxx.sh"
+WORK=$WORK/cxx-emutls CPU=$CPU LIBC=picolibc EMUTLS=1 SYSROOT=$SYSROOT \
+  sh "$here/build-cxx.sh"
 rm -f "$SYSROOT/lib/libgcc_eh.a" "$SYSROOT/lib/libgcc_s.a"
 
 # picolibc's licence, with the others build-sysroot.sh adds.

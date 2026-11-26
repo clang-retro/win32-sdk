@@ -470,10 +470,18 @@ descriptor and thread functions (`_get_osfhandle`, `_open_osfhandle`,
 
 The config file passes `-fno-emulated-tls`: picolibc's `errno` and C++
 `thread_local` variables are native TLS. DLLs that a program loads at
-startup work on every version; a DLL loaded with `LoadLibrary` gets
-native TLS only on Vista and later, so on earlier versions such a DLL
-should use another sysroot. As elsewhere, TLS callbacks never run on 9x,
-so there `thread_local` destructors do not run when a thread ends.
+startup work on every version. A DLL that `LoadLibrary` loads gets
+native TLS only on Vista and later. For earlier versions, build such a
+DLL with `win32-picolibc-emutls.cfg` (or `nt31-picolibc-emutls.cfg`).
+These use emulated TLS and the libraries in `lib/emutls`, so the DLL
+has no TLS directory. The program that loads it can use either config.
+On 9x, picolibc runs the TLS callbacks itself, so `thread_local`
+destructors run when a thread that `_beginthreadex` or `std::thread`
+started ends.
+
+```sh
+clang++ --config=win32-picolibc-emutls.cfg -shared plugin.cpp -o plugin.dll
+```
 
 ### What does not work
 
