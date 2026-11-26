@@ -363,7 +363,11 @@ clang++ --target=i586-pc-windows5.1-gnu --sysroot=$SYSROOT -fuse-ld=lld \
     `std::condition_variable` a queue of waiting threads with an event
     each; `call_once` is an interlocked flag; thread-specific data uses
     `TlsAlloc` with destructors run from the mingw-w64 runtime's thread
-    exit callback; `std::thread::get_id` uses `NtQueryInformationThread`
+    exit callback. Windows 9x does not run TLS callbacks, so there
+    `crtbegin.o` (`scripts/tls9x.c`) runs the program's callbacks at
+    startup, and a `std::thread` runs them when its function returns;
+    a thread that `CreateThread` starts does not run its `thread_local`
+    destructors on 9x; `std::thread::get_id` uses `NtQueryInformationThread`
     when there is no `GetThreadId`; `atomic::wait` polls.
   * locales: a locale is its name, set with `setlocale` for each call that
     takes one. The "C" locale costs a `setlocale(LC_ALL, NULL)` per call.
@@ -457,17 +461,27 @@ What it adds over the system C runtime:
 
 The headers are mingw-w64's Windows API headers (`windows.h` and the
 rest) with picolibc's C library headers in place of mingw-w64's.
-Microsoft-only C runtime headers and functions (`<tchar.h>`, `<conio.h>`,
-`<direct.h>`, `_stricmp` and the like) are not there; `<io.h>` and
-`<process.h>` have the descriptor and thread functions (`_get_osfhandle`,
-`_open_osfhandle`, `_beginthreadex`).
+picolibc also has the Microsoft C runtime headers and functions that
+Windows programs use most: `<tchar.h>`, `<conio.h>`, `<direct.h>`,
+`<float.h>` (`_controlfp`), `_stricmp`, `_snprintf`, `_findfirst`,
+`struct _stat` and the like. `<io.h>` and `<process.h>` have the
+descriptor and thread functions (`_get_osfhandle`, `_open_osfhandle`,
+`_beginthreadex`). The full list is in picolibc's `libos/win32/README.md`.
 
 The config file passes `-fno-emulated-tls`: picolibc's `errno` and C++
 `thread_local` variables are native TLS. DLLs that a program loads at
-startup work on every version; a DLL loaded with `LoadLibrary` gets
-native TLS only on Vista and later, so on earlier versions such a DLL
-should use another sysroot. As elsewhere, TLS callbacks never run on 9x,
-so there `thread_local` destructors do not run when a thread ends.
+startup work on every version. A DLL that `LoadLibrary` loads gets
+native TLS only on Vista and later. For earlier versions, build such a
+DLL with `win32-picolibc-emutls.cfg` (or `nt31-picolibc-emutls.cfg`).
+These use emulated TLS and the libraries in `lib/emutls`, so the DLL
+has no TLS directory. The program that loads it can use either config.
+On 9x, picolibc runs the TLS callbacks itself, so `thread_local`
+destructors run when a thread that `_beginthreadex` or `std::thread`
+started ends.
+
+```sh
+clang++ --config=win32-picolibc-emutls.cfg -shared plugin.cpp -o plugin.dll
+```
 
 ### What does not work
 

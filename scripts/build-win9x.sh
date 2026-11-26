@@ -84,7 +84,12 @@ cp "$builtins" "$SYSROOT/lib/libgcc.a"
 cp "$builtins" "$SYSROOT/lib/libclang_rt.builtins-i386.a"
 "$BIN/llvm-ar" rc "$SYSROOT/lib/libgcc_eh.a"
 : > "$WORK/empty.c"
-$CC -c "$WORK/empty.c" -o "$SYSROOT/lib/crtbegin.o"
+# crtbegin.o runs the program's TLS callbacks for DLL_PROCESS_ATTACH on 9x,
+# which does not run them (tls9x.c, next to this script; a copy of the
+# script on its own makes an empty one).
+tls9x=$(dirname "$0")/tls9x.c
+[ -f "$tls9x" ] || tls9x=$WORK/empty.c
+$CC -O2 -c "$tls9x" -o "$SYSROOT/lib/crtbegin.o"
 $CC -c "$WORK/empty.c" -o "$SYSROOT/lib/crtend.o"
 # libntseh.a: _except_handler3, for the __try blocks of the 32-bit
 # *-ddk.cfg drivers (except3.S, next to this script in a package and in

@@ -45,6 +45,10 @@ if [ -d "$pkg/sysroots/win32-picolibc" ]; then
 else
   rm -f "$d/bin/win32-picolibc.cfg" "$d/bin/nt31-picolibc.cfg"
 fi
+# Nor, before they, the emulated TLS libraries.
+if [ ! -d "$pkg/sysroots/win32-picolibc/lib/emutls" ]; then
+  rm -f "$d/bin/win32-picolibc-emutls.cfg" "$d/bin/nt31-picolibc-emutls.cfg"
+fi
 cp "$here/tools/check-imports.py" "$here/tools/msvcrt-versions.txt" \
   "$here/tools/kernel-versions.txt" "$here/tools/wdm9x-exports.txt" \
   "$here/tools/scsiport9x-exports.txt" "$here/tools/mapsym.py" \
