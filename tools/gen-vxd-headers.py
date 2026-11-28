@@ -778,6 +778,10 @@ def main():
         else:
             miniport, args = True, args[1:]
     if wdm:
+        # The headers in kernel/include are now written from the
+        # documentation, so this mode must not write over them.
+        sys.exit("--wdm: kernel/include is written by hand from the "
+                 "documentation; this mode is retired")
         SPECS = WDM_SPECS
         BASE = []
         INCLUDE = os.path.join(HERE, "..", "kernel", "include")
@@ -788,6 +792,10 @@ def main():
         PACKED = False
         EXTRA = ["-fpack-struct=8", "-mrtd"]
     if miniport:
+        # miniport/include is now made from mingw-w64's headers, so this
+        # mode must not write over it.
+        sys.exit("--miniport: miniport/include is written by hand; "
+                 "this mode is retired")
         SPECS = MINIPORT_SPECS
         BASE = []
         top = os.path.join(HERE, "..", "miniport")
