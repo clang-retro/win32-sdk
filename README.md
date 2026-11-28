@@ -879,11 +879,13 @@ python3 share/clang-dos/check-imports.py --miniport myadapter.mpd
 ```
 
 * `<miniport.h>`, `<srb.h>` and `<scsi.h>` (in
-  `sysroots/win9x-msvcrt/include/miniport9x`) have the 95, 98 and ME DDKs'
-  types, constants and structures, and the `ScsiPort*` prototypes. The
-  three DDKs agree on them. `tools/gen-vxd-headers.py --miniport` made
-  them from the DDKs' `block/inc`, as for the VxD headers, and
-  `tests/ddk/miniport-layout/*.c` checks their layouts.
+  `sysroots/win9x-msvcrt/include/miniport9x`) are mingw-w64's public
+  domain DDK headers with the Windows NT 3.51 layouts of
+  `HW_INITIALIZATION_DATA` and `PORT_CONFIGURATION_INFORMATION`, and the
+  PCI, EISA and MCA bus data. `tests/ddk/miniport-layout/*.c` checks their
+  layouts. `<scsi.h>` follows mingw-w64 and the SCSI standard, so some
+  names and mode page layouts differ from the old DDKs' (for example
+  `AlternateSectorsPerZone`, not `AlternetSectorsPerZone`).
 * Functions and callbacks are stdcall (`-mrtd`), as the DDK builds them
   with `cl -Gz`. `ScsiPortNotification` and `ScsiDebugPrint` take variable
   arguments, so they are cdecl.

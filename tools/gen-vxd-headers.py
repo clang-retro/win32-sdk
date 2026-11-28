@@ -792,6 +792,10 @@ def main():
         PACKED = False
         EXTRA = ["-fpack-struct=8", "-mrtd"]
     if miniport:
+        # miniport/include is now made from mingw-w64's headers, so this
+        # mode must not write over it.
+        sys.exit("--miniport: miniport/include is written by hand; "
+                 "this mode is retired")
         SPECS = MINIPORT_SPECS
         BASE = []
         top = os.path.join(HERE, "..", "miniport")
