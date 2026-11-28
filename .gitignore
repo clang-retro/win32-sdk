@@ -1,1 +1,5 @@
 /site/
+__pycache__/
+*.pyc
+# widl leaves its temporary files here when it stops early
+idl/tmp*/
