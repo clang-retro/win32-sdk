@@ -62,6 +62,8 @@ cp -R "$here/vxd" "$d/share/clang-dos/vxd"
 cp "$here/README.md" "$d/share/clang-dos/docs/win32-README.md"
 cp "$here/LICENSE" "$d/share/licenses/win32-sdk/LICENSE"
 cp "$here/NOTICE.md" "$d/share/licenses/win32-sdk/NOTICE.md"
+cp "$here/kernel/include/LICENSE-docs-code.txt" \
+  "$d/share/licenses/win32-sdk/microsoft-docs-code-LICENSE.txt"
 # The licences that every sysroot carries (build-sysroot.sh), once more at
 # the top, where they are easy to find.
 s=$d/sysroots/win-vista/share/licenses

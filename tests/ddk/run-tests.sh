@@ -261,9 +261,8 @@ if [ -f "$CFGDIR/nt4-ddk.cfg" ]; then
 fi
 # A display driver (display.c, win32k.sys's DDI) for NT 4.0 and later,
 # with a DirectDraw and Direct3D HAL, also with -DNT5_ONLY (EngAlphaBlend),
-# which NT 4.0 cannot load; and the layouts of the generated headers
-# (hidport.h, 1394.h, dvp.h, ddrawint.h, d3dnthal.h, dxmini.h) against the 2000 and
-# XP DDKs.
+# which NT 4.0 cannot load; and the layouts of the kernel headers
+# (hidport.h, 1394.h, dvp.h, ddrawint.h, d3dnthal.h, dxmini.h).
 if [ -f "$CFGDIR/nt4-ddk.cfg" ]; then
   for t in display::"4.0 5.0": "display-nt5:-DNT5_ONLY:5.0:4.0"; do
     n=${t%%:*} r=${t#*:}

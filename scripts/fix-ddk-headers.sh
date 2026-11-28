@@ -31,9 +31,10 @@
 # and 1394.h (IEEE 1394 client drivers), and the DirectDraw and Direct3D
 # HAL of display drivers that mingw-w64's winddi.h includes, ddrawint.h,
 # d3dnthal.h and dvp.h, and dxmini.h (DirectDraw in video miniports),
-# all of which gen-vxd-headers.py --wdm made from
-# the 2000 and XP DDKs; and hdaudio.h (HD Audio function drivers on XP's
-# and later's HDAUDBUS.SYS), written from Microsoft's documentation.
+# and hdaudio.h (HD Audio function drivers on XP's and later's
+# HDAUDBUS.SYS). ddrawint.h, dvp.h and most of d3dnthal.h come from
+# ReactOS (public domain); the others are written from Microsoft's
+# published documentation (see NOTICE.md).
 #
 #   fix-ddk-headers.sh SYSROOT
 set -e

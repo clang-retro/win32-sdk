@@ -8,6 +8,9 @@
 #else
 #define A(e) _Static_assert(e, #e);
 #endif
+/* In C++ the COM interfaces are classes with virtual functions, so
+   offsetof does not apply to them: check them in C only. */
+#ifndef __cplusplus
 A(sizeof(struct IDDVideoPortContainer) == 4)
 A(__alignof__(struct IDDVideoPortContainer) == 4)
 A(offsetof(struct IDDVideoPortContainer, lpVtbl) == 0)
@@ -52,6 +55,7 @@ A(offsetof(struct IDirectDrawVideoPortNotifyVtbl, AddRef) == 4)
 A(offsetof(struct IDirectDrawVideoPortNotifyVtbl, Release) == 8)
 A(offsetof(struct IDirectDrawVideoPortNotifyVtbl, AcquireNotification) == 12)
 A(offsetof(struct IDirectDrawVideoPortNotifyVtbl, ReleaseNotification) == 16)
+#endif
 A(sizeof(struct _DDVIDEOPORTCONNECT) == 32)
 A(__alignof__(struct _DDVIDEOPORTCONNECT) == 4)
 A(offsetof(struct _DDVIDEOPORTCONNECT, dwSize) == 0)

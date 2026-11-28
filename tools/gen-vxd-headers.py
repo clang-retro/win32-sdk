@@ -778,6 +778,10 @@ def main():
         else:
             miniport, args = True, args[1:]
     if wdm:
+        # The headers in kernel/include are now written from the
+        # documentation, so this mode must not write over them.
+        sys.exit("--wdm: kernel/include is written by hand from the "
+                 "documentation; this mode is retired")
         SPECS = WDM_SPECS
         BASE = []
         INCLUDE = os.path.join(HERE, "..", "kernel", "include")

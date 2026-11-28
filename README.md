@@ -674,10 +674,9 @@ HID drivers link mingw-w64's `-lhidparse` and `-lhidclass` (include
 includes itself), this SDK's own, which mingw-w64 lacks:
 `HID_MINIDRIVER_REGISTRATION` for `HidRegisterMinidriver`,
 `HID_DEVICE_EXTENSION`, the HID descriptor and the internal `IOCTL_HID_*`
-requests. `tools/gen-vxd-headers.py --wdm` made it, and `<1394.h>`, from
-the names, values and layouts of the 2000 and XP DDKs; what only XP has
-is under `_WIN32_WINNT >= 0x0501`. `tests/ddk/wdm-layout/` checks their
-layouts. `wdm9x-exports.txt` also has the functions of USBD.SYS, HIDCLASS.SYS and
+requests. It and `<1394.h>` are written from Microsoft's published
+documentation; what only XP has is under `_WIN32_WINNT >= 0x0501`.
+`tests/ddk/wdm-layout/` checks their layouts. `wdm9x-exports.txt` also has the functions of USBD.SYS, HIDCLASS.SYS and
 HIDPARSE.SYS, from the 98 DDK's libraries and the drivers of 98 SE and
 ME. 98 SE added `HidP_InitializeReportForID`, `HidP_GetExtendedAttributes`
 and two more. For these drivers and port class, `--wdm 98se` goes by
@@ -745,10 +744,9 @@ NT 4.0's, 2000's and XP's WIN32K.SYS (`EngAlphaBlend` and the rest of
 `DrvGetDirectDrawInfo` and `DrvEnableDirectDraw` fill in (`DD_HALINFO`,
 `DD_CALLBACKS`, `D3DNTHAL_GLOBALDRIVERDATA`, the `DD_*DATA` each callback
 gets, the DirectX 6 and later command buffer), and `<dvp.h>`, video
-ports, which mingw-w64 lacks. `gen-vxd-headers.py --wdm` made the three
-from the 2000 and XP DDKs, and `tests/ddk/wdm-layout/` checks their
-layouts; what only XP's has (DirectX 8 and 9) is under
-`_WIN32_WINNT >= 0x0501`:
+ports, which mingw-w64 lacks. The three come from ReactOS (public
+domain), with additions written from Microsoft's published
+documentation, and `tests/ddk/wdm-layout/` checks their layouts:
 
 ```sh
 clang --config=nt4-ddk.cfg -O2 -shared -Wl,--entry,_DrvEnableDriver@12 \
@@ -758,11 +756,10 @@ python3 share/clang-dos/check-imports.py --nt 4.0 mydisp.dll
 
 Video miniports (`<miniport.h>`, `<video.h>`, `-lvideoprt`) that do
 DirectDraw in kernel mode (overlay flips, video port fields, capture,
-for DXAPI.SYS) include `<dxmini.h>`, which mingw-w64 lacks;
-`gen-vxd-headers.py --wdm` made it from the 2000 and XP DDKs, with
-`GUID_DxApi`, and the miniport hands out its `DXAPI_INTERFACE` from
-`HwQueryInterface`. `tests/ddk/vidmini.c` is such a miniport. The
-generated headers have the DDKs' GUIDs (`DEFINE_GUID`) too.
+for DXAPI.SYS) include `<dxmini.h>`, which mingw-w64 lacks. It is
+written from Microsoft's published documentation, with `GUID_DxApi`, and
+the miniport hands out its `DXAPI_INTERFACE` from `HwQueryInterface`.
+`tests/ddk/vidmini.c` is such a miniport.
 
 `tests/ddk/display.c` implements `DrvBitBlt` with `EngBitBlt` and has a
 DirectDraw and Direct3D HAL with one callback, `WaitForVerticalBlank`.
